@@ -21,7 +21,12 @@ python3 build_pq4r.py units/elastic_force.py
 python3 render_check.py output/PQ4R_탄성력_교과서_편집용.docx
 ```
 
-## 디자인 (참고 PDF 「힘의 표현·힘의 평형」 PQ4R 노트 기준)
+## 디자인
+
+> **간격·표 구성·글자 크기는 `SPACING.md`(사용자 양식 파일 실측)를 따른다.** 아래는 그림·색 설명이며, 표 수치는 SPACING.md가 우선이다.
+> 글꼴은 Gamja Flower 대신 **Gaegu**를 내장한다.
+
+### 그림 (참고 PDF 「힘의 표현·힘의 평형」 PQ4R 노트 기준)
 
 - 크림색(`FFFDF6`) 바탕에 파란 테두리(`0E6CA5`) 흰 종이, 뒤에 겹친 하늘색 종이와 오른쪽 파랑·노랑 탭.
   이 틀은 머리글에 '텍스트 뒤' 전체 쪽 그림으로 넣었고, 본문은 모두 Word 표·텍스트라 그대로 편집된다.

@@ -21,13 +21,16 @@ d = fitz.open(pdf)
 fonts = sorted({f[3] for p in d for f in p.get_fonts()})
 print("쪽수:", d.page_count, "(OK)" if d.page_count == 5 else "(5쪽이 아님!)")
 print("글꼴:", ", ".join(fonts))
-bad = [f for f in fonts if "GamjaFlower" not in f]
+bad = [f for f in fonts if "Gaegu" not in f]
 if bad:
-    print("경고: 대체 글꼴이 쓰였습니다(글자 깨짐 확인 필요):", ", ".join(bad))
+    print("참고: Gaegu에 없는 기호(Ⅴ □ · 등)는 대체 글꼴로 표시:", ", ".join(bad))
 
 # 잘림 검사: DOCX 의 모든 문장이 PDF 에 온전히 나타나는지 확인 (공백 무시)
 from docx import Document
-norm = lambda x: "".join(x.split())
+from fontTools.ttLib import TTFont
+cmap = TTFont(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "Gaegu-KR-Regular.ttf")).getBestCmap()
+# 본문 글꼴에 없는 기호(Ⅴ □ · 등)는 대체 글꼴로 그려져 추출 순서가 섞이므로 비교에서 뺀다
+norm = lambda x: "".join(ch for ch in x if not ch.isspace() and ord(ch) in cmap)
 pdf_text = norm("".join(p.get_text() for p in d))
 missing = []
 for t in Document(src).tables:

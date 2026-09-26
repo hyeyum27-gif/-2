@@ -3,9 +3,10 @@
 사용법:
     python3 build_pq4r.py units/elastic_force.py
 
-소단원 내용은 units/*.py 파일에만 적는다. 이 파일의 디자인(색상, 표 너비,
-행 높이, fixed layout, tblGrid 처리)은 특별한 요청이 없으면 수정하지 않는다.
-배경 틀·구름 제목·과학 배지·내장 글꼴은 make_assets.py 가 만든 assets/ 파일을 쓴다.
+소단원 내용은 units/*.py 파일에만 적는다. 이 파일의 디자인은 특별한 요청이 없으면 수정하지 않는다.
+- 간격·표 구성·글자 크기: 사용자 양식 파일(PQ4R 통합과학2 1-1-1, 1-1-2 학생용/교사용)의 실측값 (SPACING.md)
+- 그림(배경 틀·구름 제목·과학 배지): 참고 PDF 「힘의 표현」 디자인, make_assets.py 가 만든 assets/ 파일
+- 글꼴: Gaegu (보통·굵게 서브셋을 DOCX에 내장)
 """
 import copy
 import importlib.util
@@ -17,29 +18,33 @@ import zipfile
 
 from docx import Document
 from docx.enum.table import WD_ROW_HEIGHT_RULE, WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK, WD_LINE_SPACING
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(ROOT, "assets")
-FONT = "Gamja Flower"  # assets/GamjaFlower-KR.ttf 를 DOCX에 내장한다
-FONT_FILE = os.path.join(ASSETS, "GamjaFlower-KR.ttf")
+FONT = "Gaegu"
+FONT_FILES = {"Regular": os.path.join(ASSETS, "Gaegu-KR-Regular.ttf"),
+              "Bold": os.path.join(ASSETS, "Gaegu-KR-Bold.ttf")}
 
-# 단계별 색상 (진한 색 / 연한 배경)
-P_C, P_PALE = "0E7FCC", "E0F1FA"      # Preview 파랑
-Q_C, Q_PALE = "FF9F28", "FFF0C8"      # Question 주황
-R1_C, R1_PALE = "68A941", "EAF6DC"    # Read 초록
-R2_C, R2_PALE = "FF8A68", "FFCFC0"    # Reflect 코랄
-R3_C, R3_PALE = "6C2596", "F6E4FA"    # Recite 보라
-R4_C, R4_PALE = "2BA89E", "E0FAF6"    # Review 청록
-INFO_FILL = "FFFBF0"                  # 쪽수 안내 칸
-TEXT_C, QUOTE_C = "111111", "1A3CFF"
+# 단계별 색상 (진한 색 / 연한 배경) — 사용자 양식 파일과 같은 값
+P_C, P_PALE = "138BC6", "DCEFF7"      # Preview 파랑
+Q_C, Q_PALE = "FF9F28", "FFF1D9"      # Question 주황
+R1_C, R1_PALE = "65B33F", "EDF7DF"    # Read 초록
+R2_C, R2_PALE = "FF8A68", "FFE2D8"    # Reflect 코랄
+R3_C, R3_PALE = "72269E", "F3E6FA"    # Recite 보라
+R4_C, R4_PALE = "2BA89E", "DDF6F3"    # Review 청록
+TEXT_C, REVIEW_TEXT_C = "222222", "234C48"
 
-# 본문 영역: 흰 종이(4~199.5mm) 안쪽
-LEFT, RIGHT, TOP, BOTTOM = 8.5, 15.5, 11, 14
-PAGE_W = 210 - LEFT - RIGHT  # 186mm
+# 쪽 여백·본문 폭 (양식 파일 실측: 위아래 9mm, 좌우 14mm, 본문 182mm)
+LEFT = RIGHT = 14
+TOP = BOTTOM = 9
+PAGE_W = 210 - LEFT - RIGHT  # 182mm
+CELL_PAD = 1.9               # 칸 안쪽 여백(상하좌우)
+LINE = 1.05                  # 칸 안 줄 간격(252/240)
+GAP_S, GAP_L = 3.0, 4.0      # 표 사이 간격: 제목줄→띠 3mm, 띠→표·표→띠 4mm (Review 띠→표 3mm)
 
 doc = Document()
 
@@ -54,7 +59,7 @@ def shading(cell, fill):
     tcPr.append(shd)
 
 
-def border(cell, color="000000", size=12, sides=("top", "left", "bottom", "right")):
+def border(cell, color="000000", size=11, sides=("top", "left", "bottom", "right")):
     tcPr = cell._tc.get_or_add_tcPr()
     old = tcPr.find(qn("w:tcBorders"))
     if old is not None:
@@ -72,15 +77,15 @@ def border(cell, color="000000", size=12, sides=("top", "left", "bottom", "right
         b.append(e)
 
 
-def margins(cell, top=1.2, left=2.2, bottom=1.2, right=2.2):
+def margins(cell, pad=CELL_PAD):
     tcPr = cell._tc.get_or_add_tcPr()
     old = tcPr.find(qn("w:tcMar"))
     if old is not None:
         tcPr.remove(old)
     m = OxmlElement("w:tcMar")
-    for k, v in (("top", top), ("left", left), ("bottom", bottom), ("right", right)):
+    for k in ("top", "left", "bottom", "right"):
         e = OxmlElement(f"w:{k}")
-        e.set(qn("w:w"), str(int(v * 56.7)))
+        e.set(qn("w:w"), str(int(pad * 56.7)))
         e.set(qn("w:type"), "dxa")
         m.append(e)
     tcPr.append(m)
@@ -94,7 +99,7 @@ def _font(run, size, bold, color):
     run.font.color.rgb = RGBColor.from_string(color)
 
 
-def _para(p, align, spacing):
+def _para(p, align, spacing=LINE):
     p.alignment = {"left": WD_ALIGN_PARAGRAPH.LEFT, "center": WD_ALIGN_PARAGRAPH.CENTER,
                    "right": WD_ALIGN_PARAGRAPH.RIGHT}[align]
     pf = p.paragraph_format
@@ -103,9 +108,9 @@ def _para(p, align, spacing):
     pf.line_spacing = spacing
 
 
-def write(cell, text, size=13, bold=False, color=TEXT_C, align="left",
-          valign="center", spacing=1.2):
-    """셀 내용을 text로 교체한다. 줄바꿈(\\n)은 문단, "따옴표" 구간은 파란색으로 쓴다."""
+def write(cell, text, size=11.5, bold=False, color=TEXT_C, align="left",
+          valign="center", spacing=LINE):
+    """셀 내용을 text로 교체한다. 줄바꿈(\\n)은 문단으로, **굵게** 구간은 굵은 글씨로 쓴다."""
     cell.vertical_alignment = {"top": WD_CELL_VERTICAL_ALIGNMENT.TOP,
                                "center": WD_CELL_VERTICAL_ALIGNMENT.CENTER}[valign]
     p = cell.paragraphs[0]
@@ -113,9 +118,9 @@ def write(cell, text, size=13, bold=False, color=TEXT_C, align="left",
         if i:
             p = cell.add_paragraph()
         _para(p, align, spacing)
-        for j, part in enumerate(re.split(r'("[^"]*")', line)):
+        for j, part in enumerate(line.split("**")):
             if part:
-                _font(p.add_run(part), size, bold or j % 2 == 1, QUOTE_C if j % 2 else color)
+                _font(p.add_run(part), size, bold or j % 2 == 1, color)
     return p
 
 
@@ -169,6 +174,7 @@ def table(rows, cols, widths, color="000000"):
 USABLE = 297 - TOP - BOTTOM   # 본문이 들어갈 수 있는 높이
 SAFETY = 5                    # Word·LibreOffice 차이를 위한 여유
 page_used = [0.0]
+PAGE_LOG = []
 
 
 def height(row, mm, rule=WD_ROW_HEIGHT_RULE.EXACTLY):
@@ -194,6 +200,7 @@ def spacer(mm):
     pf.line_spacing_rule = WD_LINE_SPACING.EXACTLY
     p.add_run().font.size = Pt(1)
     page_used[0] += mm
+    return p
 
 
 def check_page():
@@ -204,18 +211,17 @@ def check_page():
     page_used[0] = 0.0
 
 
-PAGE_LOG = []
-
-
-def page_break():
+def new_page():
+    """쪽 나눔: 다음 쪽 첫 표 앞 1pt 문단에 '페이지 나누기 전'을 건다(빈 쪽이 생기지 않는다)."""
     check_page()
     p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after = Pt(0)
-    p.paragraph_format.line_spacing = Pt(1)
-    r = p.add_run()
-    r.font.size = Pt(1)
-    r.add_break(WD_BREAK.PAGE)
+    pf = p.paragraph_format
+    pf.space_before = Pt(0)
+    pf.space_after = Pt(0)
+    pf.line_spacing = Pt(1)
+    pf.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    pf.page_break_before = True
+    p.add_run().font.size = Pt(1)
 
 
 def no_border(*cells):
@@ -251,35 +257,52 @@ def page_background():
     inline.getparent().replace(inline, anchor)
 
 
-def top_bar(first_page):
-    """1쪽: 구름 제목, 2~5쪽: 소단원 제목. 오른쪽에 과학 배지."""
-    t = table(1, 3, [40, 106, 40])
-    height(t.rows[0], 23 if first_page else 13)
-    a, b, c = t.row_cells(0)
-    no_border(a, b, c)
-    if first_page:
-        picture(b, os.path.join(ASSETS, "title_cloud.png"), 70)
-    else:
-        write(b, U.TITLE, 16, True, align="center")
-    c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
-    picture(c, os.path.join(ASSETS, "badge_science.png"), 22, "right")
+def first_header():
+    """1쪽 머리: [구름 제목(2칸 병합)] / [소단원 제목 | 과학 배지], 142+40mm, 17+17mm."""
+    t = table(2, 2, [142, 40])
+    height(t.rows[0], 17)
+    height(t.rows[1], 17)
+    top = t.cell(0, 0).merge(t.cell(0, 1))
+    no_border(top, t.cell(1, 0), t.cell(1, 1))
+    top.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    picture(top, os.path.join(ASSETS, "title_cloud.png"), 50)
+    border(t.cell(1, 0), "D9D9D9", 8)
+    write(t.cell(1, 0), U.TITLE, 15, True, "000000", "center")
+    t.cell(1, 1).vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    picture(t.cell(1, 1), os.path.join(ASSETS, "badge_science.png"), 26)
 
 
-def band(letter, english, phrase, color, pale):
-    t = table(1, 2, [60, 126], color)
-    height(t.rows[0], 15)
-    a, b = t.row_cells(0)
-    shading(a, color)
-    shading(b, pale)
-    write(a, f"{letter}\n{english}", 13.5, True, "FFFFFF", "center", spacing=1.0)
-    write(b, phrase, 14, True)
-
-
-def head_row(t, labels, color, fill=None, text_color="FFFFFF"):
+def small_header():
+    """2~5쪽 머리: [소단원 제목 | 과학 배지], 142+40mm, 11mm."""
+    t = table(1, 2, [142, 40])
     height(t.rows[0], 11)
+    a, b = t.row_cells(0)
+    no_border(a, b)
+    write(a, U.TITLE, 16, True, "000000", "center")
+    b.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    picture(b, os.path.join(ASSETS, "badge_science.png"), 19, "right")
+
+
+def band(letter, english, phrase, color, pale, widths=(25, 48, 109)):
+    """단계 띠: [글자 | 영어 | 설명], 25+48+109mm, 15mm."""
+    t = table(1, 3, list(widths), color)
+    height(t.rows[0], 15)
+    a, b, c = t.row_cells(0)
+    for x in (a, b, c):
+        border(x, color, 12)
+    shading(a, color)
+    shading(b, color)
+    shading(c, pale)
+    write(a, letter, 22, True, "FFFFFF", "center")
+    write(b, english, 13, True, "FFFFFF", "center")
+    write(c, phrase, 11.5, True, color)
+
+
+def head_row(t, labels, color, h):
+    height(t.rows[0], h)
     for cell, text in zip(t.rows[0].cells, labels):
-        shading(cell, fill or color)
-        write(cell, text, 12.5, True, text_color, "center")
+        shading(cell, color)
+        write(cell, text, 11.5, True, "FFFFFF", "center")
 
 
 # ---------------------------------------------------------------- 내용 불러오기
@@ -288,10 +311,10 @@ if len(sys.argv) != 2:
 spec = importlib.util.spec_from_file_location("unit", sys.argv[1])
 U = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(U)
-assert len(U.PREVIEW) in (4, 5) and U.PREVIEW[0] == "학습 목표", "PREVIEW는 '학습 목표'로 시작하는 4~5개"
-assert len(U.PREVIEW_CHECK) == 3, "PREVIEW_CHECK는 3개"
-for name, n in (("QUESTIONS", 3), ("KEYWORDS", 4), ("REFLECT", 4), ("RECITE", 3), ("REVIEW", 3)):
+for name, n in (("PREVIEW_CHECK", 3), ("PREVIEW", 4), ("QUESTIONS", 3), ("KEYWORDS", 4),
+                ("REFLECT", 4), ("RECITE", 3), ("REVIEW", 3)):
     assert len(getattr(U, name)) == n, f"{name} 항목은 {n}개여야 합니다."
+GOAL = getattr(U, "GOAL", "")  # 비우면 학생이 교과서 학습 목표를 직접 쓴다
 OUT = os.path.join(ROOT, "output", U.OUT)
 
 sec = doc.sections[0]
@@ -302,148 +325,154 @@ sec.header_distance, sec.footer_distance = Mm(0), Mm(0)
 st = doc.styles["Normal"]
 st.font.name = FONT
 st.element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), FONT)
-st.font.size = Pt(13)
+st.font.size = Pt(11.5)
 st.paragraph_format.space_after = Pt(0)
 page_background()
 
 # ---------------------------------------------------------------- 1쪽 Preview
-top_bar(True)
-spacer(0.5)
-t = table(1, 1, [PAGE_W])
-height(t.rows[0], 8.5)
-no_border(t.cell(0, 0))
-write(t.cell(0, 0), U.TITLE, 16, True, align="center")
-spacer(2)
-t = table(1, 2, [42, 144], "000000")
-height(t.rows[0], 11)
-for c in t.row_cells(0):
-    shading(c, INFO_FILL)
-    border(c, "111111", 14)
-write(t.cell(0, 0), f"교과서 {U.PAGES}", 13, False, align="center")
-write(t.cell(0, 1), "교과서를 옆에 펴고 아래 순서대로 직접 적으세요.", 13, False, align="center")
-spacer(4)
+first_header()
+spacer(GAP_S)
+p = spacer(5.4)                         # 교과서 쪽수 (오른쪽 정렬)
+p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+_font(p.add_run(f"교과서 {U.PAGES}"), 10.5, True, TEXT_C)
+spacer(1.8)
 band("P", "Preview", "먼저 훑기 - 교과서에서 확인할 내용", P_C, P_PALE)
-spacer(1)
-n = len(U.PREVIEW)
-t = table(n + 1, 1, [PAGE_W], P_C)  # 확인 상자와 적는 칸을 한 표로(표가 붙어 합쳐지는 문제 방지)
-height(t.rows[0], 34)
-shading(t.cell(0, 0), P_PALE)
-write(t.cell(0, 0), "교과서에서 먼저 확인할 내용\n" + "\n".join("□ " + x for x in U.PREVIEW_CHECK),
-      12.5, valign="top", spacing=1.25)
-for i, item in enumerate(U.PREVIEW):
-    height(t.rows[i + 1], 163 / n)
-    c = t.cell(i + 1, 0)
-    sides = ["left", "right", "top"] if i == 0 else ["left", "right"]
-    border(c, P_C, 12, sides + (["bottom"] if i == n - 1 else []))
-    write(c, f"{i + 1}. {item} :", 13.5, True, valign="top")
-page_break()
+spacer(GAP_S)
+t = table(2, 2, [42, 140], P_C)         # 교과서 확인 22mm / 학습 목표 35mm
+height(t.rows[0], 22)
+height(t.rows[1], 35)
+for r, label in enumerate(("교과서 확인", "학습 목표")):
+    shading(t.cell(r, 0), P_PALE)
+    write(t.cell(r, 0), label, 12, True, P_C, "center")
+write(t.cell(0, 1), "\n".join("□ " + x for x in U.PREVIEW_CHECK), 12)
+write(t.cell(1, 1), GOAL, 11.5)
+spacer(GAP_L)
+t = table(5, 2, [14, 168], P_C)         # 학습 전 핵심 내용 예상 13mm + 26mm×4
+height(t.rows[0], 13)
+head = t.cell(0, 0).merge(t.cell(0, 1))
+shading(head, P_C)
+write(head, "학습 전 핵심 내용 예상", 15, True, "FFFFFF", "center")
+for i, item in enumerate(U.PREVIEW, 1):
+    height(t.rows[i], 26)
+    shading(t.cell(i, 0), P_PALE)
+    write(t.cell(i, 0), str(i), 12, True, P_C, "center")
+    write(t.cell(i, 1), item, 11.5, valign="top")
 
 # ---------------------------------------------------------------- 2쪽 Question
-top_bar(False)
-spacer(4)
+new_page()
+small_header()
+spacer(GAP_S)
 band("Q", "Question", "질문 만들기 - 교과서에서 답 찾기", Q_C, Q_PALE)
-spacer(1)
-t = table(4, 3, [19, 61, 106], Q_C)
-head_row(t, ["번호", "질문", "교과서에서 찾은 답"], Q_C)
+spacer(GAP_L)
+t = table(4, 3, [14, 60, 108], Q_C)     # 14mm + 58mm×3
+head_row(t, ["번호", "질문", "교과서에서 찾은 답"], Q_C, 14)
 for i, q in enumerate(U.QUESTIONS, 1):
-    height(t.rows[i], 72)
-    a, b, c = t.row_cells(i)
-    write(a, str(i), 14, False, align="center")
-    write(b, q, 13, True, align="center", spacing=1.35)
-page_break()
+    height(t.rows[i], 58)
+    write(t.cell(i, 0), str(i), 13, True, Q_C, "center")
+    write(t.cell(i, 1), q, 11.5)
 
 # ---------------------------------------------------------------- 3쪽 Read
-top_bar(False)
-spacer(4)
+new_page()
+small_header()
+spacer(GAP_S)
 band("R", "Read", "답 찾으며 읽기 - 핵심어 정리", R1_C, R1_PALE)
-spacer(1)
-t = table(5, 2, [44, 142], R1_C)
-head_row(t, ["핵심어", "교과서에서 찾은 뜻 · 설명"], R1_C)
+spacer(GAP_L)
+t = table(5, 2, [47, 135], R1_C)        # 14mm + 44mm×4
+head_row(t, ["핵심어", "교과서에서 찾은 뜻·설명"], R1_C, 14)
 for i, k in enumerate(U.KEYWORDS, 1):
-    height(t.rows[i], 54)
-    write(t.cell(i, 0), k, 14, True, align="center")
-page_break()
+    height(t.rows[i], 44)
+    write(t.cell(i, 0), k, 12, False, TEXT_C, "center")
 
 # ---------------------------------------------------------------- 4쪽 Reflect
-REFLECT_LABELS = ["탐구·자료 연결", "탐구·자료 연결", "조건·관계 연결", "생활·확장 연결"]
-top_bar(False)
-spacer(4)
-band("R", "Reflect", "연결하기 - 탐구 · 자료 · 생활과 연결", R2_C, R2_PALE)
-spacer(1)
-t = table(5, 2, [74, 112], R2_C)
-head_row(t, ["연결 활동", "나의 생각"], R2_C)
+new_page()
+small_header()
+spacer(GAP_S)
+band("R", "Reflect", "연결하기 - 탐구·자료·생활과 연결", R2_C, R2_PALE, (25, 44.7, 112.3))
+spacer(GAP_L)
+t = table(5, 2, [70.6, 111.4], R2_C)    # 14mm + 약 49mm×4
+head_row(t, ["연결 활동", "나의 생각"], R2_C, 14)
 for i, r in enumerate(U.REFLECT, 1):
-    label, text = r if isinstance(r, tuple) else (REFLECT_LABELS[i - 1], r)
-    height(t.rows[i], 54)
-    write(t.cell(i, 0), f"{label} | 질문 {i}\n{text}", 12.5, align="center", spacing=1.35)
-page_break()
+    height(t.rows[i], 49)
+    ref, _, rest = r.partition("  ")    # "164쪽  설명…" → 쪽 표시는 굵게
+    text = f"**{i}. {ref}** {rest}" if rest else f"**{i}.** {r}"
+    write(t.cell(i, 0), text, 10.5)
 
 # ---------------------------------------------------------------- 5쪽 Recite · Review
-top_bar(False)
-spacer(4)
+new_page()
+small_header()
+spacer(GAP_S)
 band("R", "Recite", "내 말로 말하기 - 책을 덮고 쓰기", R3_C, R3_PALE)
-spacer(1)
-t = table(4, 2, [74, 112], R3_C)
-head_row(t, ["회상 질문", "내 답"], R3_C)
+spacer(GAP_S)
+t = table(4, 2, [73.8, 108.2], R3_C)    # 13mm + 33mm×3
+head_row(t, ["회상 질문", "내 답"], R3_C, 13)
 for i, r in enumerate(U.RECITE, 1):
-    height(t.rows[i], 52)
-    write(t.cell(i, 0), f'책을 덮고 "{r}"의 핵심을 1~2문장으로 말하세요.', 12.5,
-          align="center", spacing=1.35)
-spacer(6)
+    height(t.rows[i], 33)
+    write(t.cell(i, 0), f"**{i}.** {r}", 10.5)
+spacer(GAP_L)
 band("R", "Review", "다시 확인하기 - 자기 점검", R4_C, R4_PALE)
-spacer(1)
-t = table(1, 1, [PAGE_W], R4_C)
-height(t.rows[0], 30)
-shading(t.cell(0, 0), R4_PALE)
-write(t.cell(0, 0), "\n".join("□ " + r for r in U.REVIEW), 13, spacing=1.4)
+spacer(GAP_S)
+t = table(4, 2, [14, 168], R4_C)        # 12mm + 17mm×3
+height(t.rows[0], 12)
+head = t.cell(0, 0).merge(t.cell(0, 1))
+shading(head, R4_C)
+write(head, "자기 점검", 11.5, True, "FFFFFF", "center")
+for i, r in enumerate(U.REVIEW, 1):
+    height(t.rows[i], 17)
+    shading(t.cell(i, 0), R4_PALE)
+    write(t.cell(i, 0), "□", 13, False, R4_C, "center")
+    write(t.cell(i, 1), r, 11, False, REVIEW_TEXT_C)
 
 
 # ---------------------------------------------------------------- 메타데이터·저장·글꼴 내장
-def embed_font(path, ttf, name):
+def embed_fonts(path, name, files):
     """TrueType 글꼴을 난독화(odttf)해 DOCX에 내장한다(Word '파일의 글꼴 포함'과 같은 구조)."""
-    key = "{" + str(uuid.uuid4()).upper() + "}"
-    kb = bytes.fromhex(key.strip("{}").replace("-", ""))[::-1]
-    data = bytearray(open(ttf, "rb").read())
-    for i in range(32):
-        data[i] ^= kb[i % 16]
     zin = zipfile.ZipFile(path)
-    files = {n: zin.read(n) for n in zin.namelist()}
+    parts = {n: zin.read(n) for n in zin.namelist()}
     zin.close()
-    ct = files["[Content_Types].xml"].decode()
+    ct = parts["[Content_Types].xml"].decode()
     if 'Extension="odttf"' not in ct:
         ct = ct.replace("<Default ", '<Default Extension="odttf" ContentType="application/'
                         'vnd.openxmlformats-officedocument.obfuscatedFont"/><Default ', 1)
-    files["[Content_Types].xml"] = ct.encode()
-    ft = files["word/fontTable.xml"].decode()
-    font_xml = (f'<w:font w:name="{name}"><w:charset w:val="81"/><w:family w:val="auto"/>'
-                f'<w:pitch w:val="variable"/><w:embedRegular r:id="rIdF1" w:fontKey="{key}"/></w:font>')
+    parts["[Content_Types].xml"] = ct.encode()
+    rels, embeds = [], []
+    for i, (style, ttf) in enumerate(files.items(), 1):
+        key = "{" + str(uuid.uuid4()).upper() + "}"
+        kb = bytes.fromhex(key.strip("{}").replace("-", ""))[::-1]
+        data = bytearray(open(ttf, "rb").read())
+        for j in range(32):
+            data[j] ^= kb[j % 16]
+        parts[f"word/fonts/font{i}.odttf"] = bytes(data)
+        rels.append(f'<Relationship Id="rIdF{i}" Type="http://schemas.openxmlformats.org/'
+                    f'officeDocument/2006/relationships/font" Target="fonts/font{i}.odttf"/>')
+        embeds.append(f'<w:embed{style} r:id="rIdF{i}" w:fontKey="{key}"/>')
+    ft = parts["word/fontTable.xml"].decode()
     if 'xmlns:r=' not in ft.split(">", 2)[1]:
         ft = ft.replace("<w:fonts ", '<w:fonts xmlns:r="http://schemas.openxmlformats.org/'
                         'officeDocument/2006/relationships" ', 1)
-    ft = ft.replace("</w:fonts>", font_xml + "</w:fonts>")
-    files["word/fontTable.xml"] = ft.encode()
-    files["word/_rels/fontTable.xml.rels"] = (
+    ft = ft.replace("</w:fonts>", f'<w:font w:name="{name}"><w:charset w:val="81"/>'
+                    f'<w:family w:val="auto"/><w:pitch w:val="variable"/>{"".join(embeds)}'
+                    '</w:font></w:fonts>')
+    parts["word/fontTable.xml"] = ft.encode()
+    parts["word/_rels/fontTable.xml.rels"] = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rIdF1" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
-        'relationships/font" Target="fonts/font1.odttf"/></Relationships>').encode()
-    files["word/fonts/font1.odttf"] = bytes(data)
-    stx = files["word/settings.xml"].decode()
+        + "".join(rels) + '</Relationships>').encode()
+    stx = parts["word/settings.xml"].decode()
     if "embedTrueTypeFonts" not in stx:
         stx = re.sub(r"(<w:zoom[^>]*/>)", r"\1<w:embedTrueTypeFonts/>", stx, 1)
-    files["word/settings.xml"] = stx.encode()
+    parts["word/settings.xml"] = stx.encode()
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        for n, b in files.items():
+        for n, b in parts.items():
             z.writestr(n, b)
 
 
+check_page()
+assert len(PAGE_LOG) == 5, f"5쪽이어야 하는데 {len(PAGE_LOG)}쪽입니다."
+print("쪽별 사용 높이(mm):", PAGE_LOG, f"/ 한도 {USABLE - SAFETY}")
 doc.core_properties.title = f"PQ4R 노트 - {U.TITLE}"
 doc.core_properties.subject = f"미래엔 중등 과학 {U.TITLE} ({U.PAGES})"
 doc.core_properties.author = "PQ4R 학습노트"
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
-check_page()
-assert len(PAGE_LOG) == 5, f"5쪽이어야 하는데 {len(PAGE_LOG)}쪽입니다."
-print("쪽별 사용 높이(mm):", PAGE_LOG, f"/ 한도 {USABLE - SAFETY}")
 doc.save(OUT)
-embed_font(OUT, FONT_FILE, FONT)
+embed_fonts(OUT, FONT, FONT_FILES)
 print(OUT)

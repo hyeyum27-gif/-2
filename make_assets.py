@@ -1,9 +1,9 @@
 """디자인 자산 생성: 페이지 배경 틀, 「PQ4R 노트」 구름 제목, 「과학」 배지, 내장용 글꼴 서브셋.
 
-원본 글꼴(npm @fontsource/gamja-flower@4.0.0, @fontsource/jua@4.0.0 의 *-all-400-normal.woff 를
+원본 글꼴(npm @fontsource/gamja-flower@4.0.0, @fontsource/jua@4.0.0, @fontsource/gaegu@4.0.0 의 *-all-400-normal.woff 를
 TTF로 변환한 것)을 인자로 준다. 결과는 assets/ 에 저장되고 저장소에 함께 커밋한다.
 
-    python3 make_assets.py <GamjaFlower.ttf> <Jua.ttf>
+    python3 make_assets.py <GamjaFlower.ttf> <Jua.ttf> <Gaegu-400.ttf> <Gaegu-700.ttf>
 """
 import math
 import os
@@ -51,6 +51,10 @@ def make_subset(src, dst, text):
 
 
 make_subset(gamja_src, os.path.join(A, "GamjaFlower-KR.ttf"), charset())
+# 본문 글꼴 Gaegu (사용자 양식 파일과 같은 글꼴) — 보통/굵게
+if len(sys.argv) > 4:
+    make_subset(sys.argv[3], os.path.join(A, "Gaegu-KR-Regular.ttf"), charset())
+    make_subset(sys.argv[4], os.path.join(A, "Gaegu-KR-Bold.ttf"), charset())
 make_subset(jua_src, os.path.join(A, "Jua-title.ttf"), "PQ4R 노트과학")
 
 
