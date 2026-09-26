@@ -1,0 +1,81 @@
+/* Phosphor Icons (MIT) - 이 사이트에서 쓰는 아이콘만 남긴 파일 */
+@font-face {
+  font-family: "Phosphor";
+  src:
+    url("./Phosphor.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+.ph {
+  /* use !important to prevent issues with browser extensions that change fonts */
+  font-family: "Phosphor" !important;
+  speak: never;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+
+  /* Enable Ligatures ================ */
+  letter-spacing: 0;
+  -webkit-font-feature-settings: "liga";
+  -moz-font-feature-settings: "liga=1";
+  -moz-font-feature-settings: "liga";
+  -ms-font-feature-settings: "liga" 1;
+  font-feature-settings: "liga";
+  -webkit-font-variant-ligatures: discretionary-ligatures;
+  font-variant-ligatures: discretionary-ligatures;
+
+  /* Better Font Rendering =========== */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.ph.ph-phone:before {
+  content: "\e3b8";
+}
+.ph.ph-chat-circle-text:before {
+  content: "\e16e";
+}
+.ph.ph-map-pin:before {
+  content: "\e316";
+}
+.ph.ph-train-simple:before {
+  content: "\e4a0";
+}
+.ph.ph-clock:before {
+  content: "\e19a";
+}
+.ph.ph-calendar-blank:before {
+  content: "\e10a";
+}
+.ph.ph-arrow-right:before {
+  content: "\e06c";
+}
+.ph.ph-arrow-up-right:before {
+  content: "\e092";
+}
+.ph.ph-car:before {
+  content: "\e112";
+}
+.ph.ph-check-circle:before {
+  content: "\e184";
+}
+.ph.ph-warning-circle:before {
+  content: "\e4e2";
+}
+.ph.ph-copy:before {
+  content: "\e1ca";
+}
+.ph.ph-list:before {
+  content: "\e2f0";
+}
+.ph.ph-x:before {
+  content: "\e4f6";
+}
+.ph.ph-chalkboard-teacher:before {
+  content: "\e600";
+}
+.ph.ph-student:before {
+  content: "\e73e";
+}
