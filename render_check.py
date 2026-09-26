@@ -21,8 +21,9 @@ d = fitz.open(pdf)
 fonts = sorted({f[3] for p in d for f in p.get_fonts()})
 print("쪽수:", d.page_count, "(OK)" if d.page_count == 5 else "(5쪽이 아님!)")
 print("글꼴:", ", ".join(fonts))
-if not any("NotoSansKR" in f.replace(" ", "") for f in fonts):
-    print("경고: Noto Sans KR 이 쓰이지 않았습니다. 글꼴 설치를 확인하세요.")
+bad = [f for f in fonts if "GamjaFlower" not in f]
+if bad:
+    print("경고: 대체 글꼴이 쓰였습니다(글자 깨짐 확인 필요):", ", ".join(bad))
 
 imgs = []
 for i, p in enumerate(d, 1):
@@ -31,7 +32,8 @@ for i, p in enumerate(d, 1):
     pix.save(path)
     imgs.append(Image.open(path))
     w, h = p.rect.width, p.rect.height
-    print(f"  {i}쪽 글자 수 {len(p.get_text().strip())}, 크기 {w:.0f}x{h:.0f}pt")
+    bottom = max((dr["rect"][3] for dr in p.get_drawings()), default=0) * 25.4 / 72
+    print(f"  {i}쪽 글자 수 {len(p.get_text().strip())}, 표 하단 {bottom:.1f}mm (종이 하단 287mm)")
 
 tw = 500
 th = int(imgs[0].height * tw / imgs[0].width)
