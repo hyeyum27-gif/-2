@@ -25,6 +25,21 @@ bad = [f for f in fonts if "GamjaFlower" not in f]
 if bad:
     print("경고: 대체 글꼴이 쓰였습니다(글자 깨짐 확인 필요):", ", ".join(bad))
 
+# 잘림 검사: DOCX 의 모든 문장이 PDF 에 온전히 나타나는지 확인 (공백 무시)
+from docx import Document
+norm = lambda x: "".join(x.split())
+pdf_text = norm("".join(p.get_text() for p in d))
+missing = []
+for t in Document(src).tables:
+    for row in t.rows:
+        for c in row.cells:
+            for par in c.paragraphs:
+                if norm(par.text) and norm(par.text) not in pdf_text:
+                    missing.append(par.text)
+print("잘린 문장:", "없음 (OK)" if not missing else "")
+for m in dict.fromkeys(missing):
+    print("   ✗", m)
+
 imgs = []
 for i, p in enumerate(d, 1):
     pix = p.get_pixmap(dpi=110)

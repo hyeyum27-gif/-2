@@ -165,11 +165,24 @@ def table(rows, cols, widths, color="000000"):
     return t
 
 
+# 쪽마다 쓴 높이(mm)를 모아 한 쪽을 넘지 않는지 검사한다.
+USABLE = 297 - TOP - BOTTOM   # 본문이 들어갈 수 있는 높이
+SAFETY = 5                    # Word·LibreOffice 차이를 위한 여유
+page_used = [0.0]
+
+
 def height(row, mm, rule=WD_ROW_HEIGHT_RULE.EXACTLY):
+    """행 높이 고정 + 행 나눔 금지 + 다음 행과 같은 쪽 유지(표 전체가 한 쪽에 머문다)."""
     row.height = Mm(mm)
     row.height_rule = rule
     trPr = row._tr.get_or_add_trPr()
     trPr.append(OxmlElement("w:cantSplit"))
+    page_used[0] += mm
+    tbl = row._tr.getparent()
+    if row._tr is not tbl.findall(qn("w:tr"))[-1]:
+        for cell in row.cells:
+            for p in cell.paragraphs:
+                p.paragraph_format.keep_with_next = True
 
 
 def spacer(mm):
@@ -180,9 +193,22 @@ def spacer(mm):
     pf.line_spacing = Mm(mm)
     pf.line_spacing_rule = WD_LINE_SPACING.EXACTLY
     p.add_run().font.size = Pt(1)
+    page_used[0] += mm
+
+
+def check_page():
+    n = len(PAGE_LOG) + 1
+    PAGE_LOG.append(round(page_used[0], 1))
+    assert page_used[0] <= USABLE - SAFETY, (
+        f"{n}쪽 표 높이 합 {page_used[0]:.1f}mm 가 한 쪽({USABLE - SAFETY}mm)을 넘습니다. 행 높이를 줄이세요.")
+    page_used[0] = 0.0
+
+
+PAGE_LOG = []
 
 
 def page_break():
+    check_page()
     p = doc.add_paragraph()
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(0)
@@ -203,6 +229,8 @@ def page_background():
     hdr = doc.sections[0].header
     p = hdr.paragraphs[0]
     _para(p, "left", 1.0)
+    p.paragraph_format.line_spacing = Pt(1)
+    p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
     run = p.add_run()
     run.add_picture(os.path.join(ASSETS, "page_bg.png"), width=Mm(210), height=Mm(297))
     inline = run._r.find(".//" + qn("wp:inline"))
@@ -280,8 +308,9 @@ page_background()
 
 # ---------------------------------------------------------------- 1쪽 Preview
 top_bar(True)
+spacer(0.5)
 t = table(1, 1, [PAGE_W])
-height(t.rows[0], 9)
+height(t.rows[0], 8.5)
 no_border(t.cell(0, 0))
 write(t.cell(0, 0), U.TITLE, 16, True, align="center")
 spacer(2)
@@ -295,18 +324,17 @@ write(t.cell(0, 1), "교과서를 옆에 펴고 아래 순서대로 직접 적�
 spacer(4)
 band("P", "Preview", "먼저 훑기 - 교과서에서 확인할 내용", P_C, P_PALE)
 spacer(1)
-t = table(1, 1, [PAGE_W], P_C)
-height(t.rows[0], 32)
+n = len(U.PREVIEW)
+t = table(n + 1, 1, [PAGE_W], P_C)  # 확인 상자와 적는 칸을 한 표로(표가 붙어 합쳐지는 문제 방지)
+height(t.rows[0], 34)
 shading(t.cell(0, 0), P_PALE)
 write(t.cell(0, 0), "교과서에서 먼저 확인할 내용\n" + "\n".join("□ " + x for x in U.PREVIEW_CHECK),
-      12.5, spacing=1.3)
-n = len(U.PREVIEW)
-t = table(n, 1, [PAGE_W], P_C)
+      12.5, valign="top", spacing=1.25)
 for i, item in enumerate(U.PREVIEW):
-    height(t.rows[i], 165 / n)
-    c = t.cell(i, 0)
-    sides = ["left", "right"] + (["top"] if i == 0 else []) + (["bottom"] if i == n - 1 else [])
-    border(c, P_C, 12, sides)
+    height(t.rows[i + 1], 163 / n)
+    c = t.cell(i + 1, 0)
+    sides = ["left", "right", "top"] if i == 0 else ["left", "right"]
+    border(c, P_C, 12, sides + (["bottom"] if i == n - 1 else []))
     write(c, f"{i + 1}. {item} :", 13.5, True, valign="top")
 page_break()
 
@@ -413,6 +441,9 @@ doc.core_properties.title = f"PQ4R 노트 - {U.TITLE}"
 doc.core_properties.subject = f"미래엔 중등 과학 {U.TITLE} ({U.PAGES})"
 doc.core_properties.author = "PQ4R 학습노트"
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
+check_page()
+assert len(PAGE_LOG) == 5, f"5쪽이어야 하는데 {len(PAGE_LOG)}쪽입니다."
+print("쪽별 사용 높이(mm):", PAGE_LOG, f"/ 한도 {USABLE - SAFETY}")
 doc.save(OUT)
 embed_font(OUT, FONT_FILE, FONT)
 print(OUT)
