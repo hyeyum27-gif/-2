@@ -63,6 +63,9 @@ python3 render_check.py output/PQ4R_탄성력_교과서_편집용.docx
 
 ## 지켜야 할 설계
 
+- **모든 표는 한 쪽 안에 들어가야 한다.** 생성기가 쪽별 높이 합을 검사하고(넘치면 중단), 행은 나눔 금지·다음 행과 같은 쪽 유지로 묶여 있다.
+  `render_check.py`는 5쪽 여부, 대체 글꼴, DOCX 문장이 PDF에서 잘리지 않았는지를 검사한다.
+
 - 표는 `table()`에서 `columns.width` + `tblGrid/gridCol` + 셀 `tcW` + `tblLayout=fixed`를 모두 지정한다.
   하나라도 빠지면 LibreOffice에서 열 너비가 같아진다.
 - 행 높이는 고정(exact)이다. 표 하단이 흰 종이 하단(287mm)보다 위(약 265~275mm)에 오도록 맞춰 두었다.
