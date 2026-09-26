@@ -221,7 +221,20 @@ ul { margin: 0; padding: 0; list-style: none; }
 .teacher-main {
   grid-row: span 2; display: grid; grid-template-columns: 220px 1fr; gap: 32px; align-items: center;
 }
-.teacher-tint { background: var(--accent-soft); border-color: transparent; }
+.method-list { grid-row: span 2; display: grid; gap: 12px; }
+.method {
+  display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: start;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-card); padding: 22px 24px;
+}
+.method > .ph {
+  display: grid; place-items: center; width: 44px; height: 44px;
+  border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 22px;
+}
+.method h3 { font-size: 19px; margin-bottom: 4px; }
+.method p { color: var(--text-muted); font-size: 16px; }
+.method-tint { background: var(--accent-soft); border-color: transparent; }
+.method-tint > .ph { background: var(--surface); }
 .teacher-photo {
   aspect-ratio: 4 / 5; border-radius: 12px; background: var(--surface-alt);
   display: grid; place-items: center; color: var(--text-muted); font-size: 44px;
@@ -235,11 +248,11 @@ ul { margin: 0; padding: 0; list-style: none; }
   padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 600;
   background: var(--surface-alt); color: var(--text);
 }
-.teacher-tint .tag-list li { background: var(--surface); }
 
 @media (max-width: 899px) {
   .teacher-grid { grid-template-columns: 1fr; }
-  .teacher-main { grid-row: auto; grid-template-columns: 1fr; }
+  .teacher-main, .method-list { grid-row: auto; }
+  .teacher-main { grid-template-columns: 1fr; }
   .teacher-photo { max-width: 220px; }
 }
 
@@ -272,6 +285,15 @@ ul { margin: 0; padding: 0; list-style: none; }
 .class-hours { font-variant-numeric: tabular-nums; color: var(--text-muted); }
 .panel-note { margin-top: 16px; font-size: 15px; color: var(--text-muted); }
 .notice { margin-top: 16px; color: var(--text-muted); }
+.fee-box {
+  margin-top: 32px; padding: 24px 28px; border-radius: var(--radius-card);
+  background: var(--surface); border: 1px solid var(--line);
+  display: grid; grid-template-columns: auto auto 1fr; gap: 8px 24px; align-items: baseline;
+}
+.fee-label { font-weight: 600; color: var(--accent); }
+.fee-amount { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.fee-note { color: var(--text-muted); font-size: 15px; }
+@media (max-width: 767px) { .fee-box { grid-template-columns: 1fr; } }
 
 /* 오시는 길 */
 .location-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 48px; align-items: stretch; }
