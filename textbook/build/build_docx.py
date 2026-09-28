@@ -44,6 +44,15 @@ RULE = "C9D7DE"       # 머리 아래 구분선, 쓰기 줄
 TW = 1440             # twips / inch
 EMU = 914400          # EMU / inch
 BODY_W = 10070        # 표 폭 (기준 파일과 동일)
+FULL_W = 11220        # 본문 전체 폭 (활동 머리 띠)
+
+# 활동 종류별 색: 띠·번호 배지·문제 번호·돌아보기 바탕에 함께 쓴다.
+KIND = {
+    "기본 활동": {"main": "2B8FA3", "tint": "E7F4F7", "title": "1D4E5C"},
+    "생각 더하기": {"main": "E97F3F", "tint": "FDEFE4", "title": "7E3E12"},
+    "생각 넓히기": {"main": "5FA152", "tint": "EBF5E7", "title": "2E5F27"},
+}
+CUR = dict(KIND["기본 활동"])   # 지금 조판 중인 활동의 색
 IMG_W = 6.8           # 그림 폭 (기준 파일과 동일, inch)
 
 
@@ -52,7 +61,7 @@ def esc(t):
 
 
 # ── 문단·런 ───────────────────────────────────────────
-def run(text, b=False, color=None, sz=None):
+def run(text, b=False, color=None, sz=None, shd=None, bdr=None, u=None):
     rpr = ""
     if b:
         rpr += "<w:b/>"
@@ -60,6 +69,12 @@ def run(text, b=False, color=None, sz=None):
         rpr += f'<w:color w:val="{color}"/>'
     if sz:
         rpr += f'<w:sz w:val="{sz}"/><w:szCs w:val="{sz}"/>'
+    if u:
+        rpr += f'<w:u w:val="thick" w:color="{u}"/>'
+    if bdr:
+        rpr += f'<w:bdr w:val="single" w:sz="8" w:space="0" w:color="{bdr}"/>'
+    if shd:
+        rpr += f'<w:shd w:val="clear" w:color="auto" w:fill="{shd}"/>'
     rpr += '<w:lang w:eastAsia="ko-KR"/>'   # 테마 한글 글꼴(맑은 고딕)이 선택되도록
     parts = text.split("\n")
     out = ""
@@ -113,34 +128,84 @@ def rule_border(side="bottom", color=RULE, size=6, space=6, between=False):
     return f"<w:pBdr>{s}</w:pBdr>"
 
 
-# ── 활동 머리: 번호 → 제목 → 오늘의 목표 (모든 활동 동일) ──
-KIND_TITLE_COLOR = {"기본 활동": NAVY, "생각 더하기": AMBER, "생각 넓히기": GREEN}
+# ── 활동 머리: 번호 배지 → 제목 → 오늘의 목표 (모든 활동 동일한 띠) ──
+TOC = []   # (종류, 번호, 제목) — 차례 쪽에 쓴다
 
 
 def header(kind, num, title, goal):
-    label = [run(kind, b=True, color=CORAL, sz=20)]
-    if num:
-        label.append(run("  " + num, b=True, color=CORAL, sz=20))
+    CUR.clear()
+    CUR.update(KIND[kind])
+    TOC.append((kind, num, title))
+    c = KIND[kind]
+    no_border = ('<w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/>'
+                 '<w:right w:val="nil"/></w:tcBorders>')
+    mar = lambda l, r: (f'<w:tcMar><w:top w:w="100" w:type="dxa"/><w:left w:w="{l}" w:type="dxa"/>'
+                        f'<w:bottom w:w="100" w:type="dxa"/><w:right w:w="{r}" w:type="dxa"/></w:tcMar>')
+    badge_w, body_w = 1500, FULL_W - 1500
+    big = num if num else "+"
+    badge = (f'<w:tc><w:tcPr><w:tcW w:w="{badge_w}" w:type="dxa"/>{no_border}'
+             f'<w:shd w:val="clear" w:color="auto" w:fill="{c["main"]}"/>{mar(60, 60)}<w:vAlign w:val="center"/></w:tcPr>'
+             + para([run(kind, b=True, color="FFFFFF", sz=17)], jc="center", before=0, after=0, line=240)
+             + para([run(big, b=True, color="FFFFFF", sz=52)], jc="center", before=0, after=0, line=240)
+             + "</w:tc>")
+    body = (f'<w:tc><w:tcPr><w:tcW w:w="{body_w}" w:type="dxa"/>{no_border}'
+            f'<w:shd w:val="clear" w:color="auto" w:fill="{c["tint"]}"/>{mar(300, 200)}<w:vAlign w:val="center"/></w:tcPr>'
+            + para([run(title, b=True, color=c["title"], sz=36)], style="1", before=0, after=100, line=240)
+            + para([run(" 오늘의 목표 ", b=True, color="FFFFFF", sz=19, shd=c["main"]),
+                    run("   " + goal, sz=21, color="33434F")], before=0, after=0, line=260)
+            + "</w:tc>")
+    band = (f'<w:tbl><w:tblPr><w:tblW w:w="{FULL_W}" w:type="dxa"/><w:jc w:val="center"/>'
+            f'<w:tblLayout w:type="fixed"/><w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" '
+            f'w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'
+            f'<w:tblCaption w:val="활동 머리"/></w:tblPr>'
+            f'<w:tblGrid><w:gridCol w:w="{badge_w}"/><w:gridCol w:w="{body_w}"/></w:tblGrid>'
+            f'<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="1080" w:hRule="atLeast"/></w:trPr>'
+            f"{badge}{body}</w:tr></w:tbl>")
     return [
-        para(label, page_break=True, keep_next=True, before=0, after=40, line=240),
-        para([run(title, color=KIND_TITLE_COLOR[kind])], style="1", keep_next=True,
-             before=0, after=120, line=240),
-        para([run("오늘의 목표", b=True, color=TEAL, sz=21), run("   " + goal, sz=21)],
-             border=rule_border(space=8), before=0, after=240),
+        para("", page_break=True, before=0, after=0, line=40, line_rule="exact"),
+        band,
+        para("", before=0, after=0, line=280, line_rule="exact"),
     ]
+
+
+ANS = "⟦답⟧"
+
+
+def answer_box(label="답", width=10):
+    """최종 답을 쓰는 칸: 색 글자 '답' + 테두리 칸."""
+    nb = "\u00a0"
+    return (run(f"{nb}{label}{nb}", b=True, color="FFFFFF", sz=20, shd=CUR["main"])
+            + run("  ", sz=22) + run("_" * (width * 2), sz=22, color=CUR["main"]))
 
 
 def text(t, sz=None, after=None, jc=None, b=False, keep_next=False, before=None):
     """본문 문단. 답을 쓰는 빈칸(____)이 있는 줄은 손글씨가 들어갈 만큼 아래 간격을 더 준다."""
+    writes = "__" in t or ANS in t
     if after is None:
-        after = 300 if "__" in t else 160
+        after = 300 if writes else 160
+    if ANS in t:  # noqa
+        parts = t.split(ANS)
+        content = []
+        for i, ptxt in enumerate(parts):
+            if i:
+                content.append(answer_box())
+            if ptxt:
+                content.append(run(ptxt, sz=sz, b=b))
+        return para(content, after=after, jc=jc, keep_next=keep_next, before=before, line=320)
     return para(t, sz=sz, after=after, jc=jc, b=b, keep_next=keep_next, before=before,
-                line=300 if "__" in t else None)
+                line=300 if writes else None)
 
 
 def q(num, t):
-    """문제 머리 (기준 파일의 제목 2 스타일)."""
-    return para(f"{num}  {t}" if num else t, style="21", keep_next=True, before=360, after=140)
+    """문제 머리: 색 번호 배지 + 굵은 질문 (제목 2 스타일)."""
+    nb = "\u00a0"
+    content = []
+    if num:
+        content.append(run(f"{nb}{num}{nb}", b=True, color="FFFFFF", sz=22, shd=CUR["main"]))
+        content.append(run("  " + t, b=True, color="1F2D38", sz=23))
+    else:
+        content.append(run(t, b=True, color=CUR["main"], sz=23))
+    return para(content, style="21", keep_next=True, before=360, after=140)
 
 
 def spacer(h=None):
@@ -154,16 +219,22 @@ def write_lines(n):
 
 
 # 돌아보기는 모든 활동에서 쪽 아래 같은 자리에 둔다 (본문 길이와 상관없이 위치 통일).
-BOTTOM_FRAME = ('<w:framePr w:w="11220" w:hSpace="0" w:wrap="notBeside" w:vAnchor="margin" '
+BOTTOM_FRAME = ('<w:framePr w:w="11000" w:hSpace="0" w:wrap="notBeside" w:vAnchor="margin" '
                 'w:hAnchor="margin" w:x="0" w:yAlign="bottom"/>')
 
 
 def reflect(t="내 생각을 말이나 그림으로 설명했나요?"):
+    shade = f'<w:shd w:val="clear" w:color="auto" w:fill="{CUR["tint"]}"/>'
+    bar = (f'<w:pBdr><w:top w:val="single" w:sz="18" w:space="6" w:color="{CUR["main"]}"/></w:pBdr>'
+           + shade)
+    faces = []
+    for name, label in (("face_good", "혼자 했어요"), ("face_ok", "도움을 받아 했어요"), ("face_retry", "다시 해 볼래요")):
+        faces += [inline_img(name, 0.24), run(f" {label}        ", sz=20)]
     return [
-        para([run("돌아보기", b=True, color=TEAL, sz=21), run("   " + t, sz=21)],
-             frame=BOTTOM_FRAME, border=rule_border("top", space=8), before=0, after=60),
-        para([run("혼자 했어요 □     도움을 받아 했어요 □     다시 해 볼래요 □", sz=20)],
-             frame=BOTTOM_FRAME, before=0, after=0),
+        para([run("돌아보기", b=True, color=CUR["main"], sz=22), run("   " + t, sz=21)],
+             frame=BOTTOM_FRAME, border=bar, before=0, after=80),
+        para(faces + [run("알맞은 얼굴에 색칠해요.", sz=17, color="6B7B86")],
+             frame=BOTTOM_FRAME, border=shade, before=0, after=0, line=360),
     ]
 
 
@@ -216,9 +287,16 @@ def draw_box(title, height_in, widths=None):
     return out + "</w:tr></w:tbl>"
 
 
-def note(title, lines, fill=NOTE_FILL):
-    """보기·함께 해 보기·단서 상자."""
-    ps = [para([run(title, b=True, color=AMBER, sz=21)], before=60, after=40, line=260)]
+NOTE_ICON = {"함께 해 보기": "icon_bird", "도움말": "icon_fox"}
+
+
+def note(title, lines, fill=NOTE_FILL, icon=None):
+    """보기·함께 해 보기·단서 상자. 함께 해 보기는 콩이, 도움말은 보리가 알려 준다."""
+    icon = icon or NOTE_ICON.get(title)
+    head = [run(title, b=True, color=AMBER, sz=21)]
+    if icon:
+        head = [inline_img(icon, 0.42), run("  ", sz=21)] + head
+    ps = [para(head, before=60, after=40, line=260)]
     for ln in lines:
         ps.append(para(ln, before=0, after=40, line=300))
     tc = (f'<w:tc><w:tcPr><w:tcW w:w="{BODY_W}" w:type="dxa"/><w:tcBorders>'
@@ -252,6 +330,9 @@ class Media:
 
     def add(self, path):
         target = "media/" + os.path.basename(path)
+        for rid, tg in self.rels.items():
+            if tg == target:
+                return rid
         rid = f"rId{self.next_id}"
         self.next_id += 1
         self.rels[rid] = target
@@ -262,10 +343,10 @@ class Media:
 MEDIA = Media()
 
 
-def image(rid, w_in, h_in, jc="center", after=120):
+def drawing(rid, w_in, h_in):
     MEDIA.doc_pr += 1
     cx, cy = int(w_in * EMU), int(h_in * EMU)
-    d = (f'<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="{cx}" cy="{cy}"/>'
+    return (f'<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="{cx}" cy="{cy}"/>'
          f'<wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="{MEDIA.doc_pr}" name="그림 {MEDIA.doc_pr}"/>'
          f'<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
          f'<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
@@ -274,7 +355,17 @@ def image(rid, w_in, h_in, jc="center", after=120):
          f'<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm>'
          f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic>'
          f"</wp:inline></w:drawing>")
-    return para([f"<w:r>{d}</w:r>"], jc=jc, before=60, after=after, line=240)
+
+
+def inline_img(name, w_in):
+    """글줄 안에 들어가는 작은 그림(아이콘)."""
+    path = os.path.join(IMG, name + ".png")
+    w, h = Image.open(path).size
+    return f'<w:r><w:rPr><w:position w:val="-6"/></w:rPr>{drawing(MEDIA.add(path), w_in, w_in * h / w)}</w:r>'
+
+
+def image(rid, w_in, h_in, jc="center", after=120):
+    return para([f"<w:r>{drawing(rid, w_in, h_in)}</w:r>"], jc=jc, before=60, after=after, line=240)
 
 
 def fig(name_or_rid, w_in=IMG_W, after=120):
@@ -303,7 +394,7 @@ ORDER = {
     "tcPr": "cnfStyle tcW gridSpan hMerge vMerge tcBorders shd noWrap tcMar textDirection tcFitText vAlign hideMark",
     "trPr": "cnfStyle divId gridBefore gridAfter wBefore wAfter cantSplit trHeight tblHeader tblCellSpacing jc hidden",
     "tblPr": "tblStyle tblpPr tblOverlap bidiVisual tblStyleRowBandSize tblStyleColBandSize tblW jc tblCellSpacing "
-             "tblInd tblBorders shd tblLayout tblCellMar tblLook",
+             "tblInd tblBorders shd tblLayout tblCellMar tblLook tblCaption tblDescription",
 }
 ORDER = {k: {n: i for i, n in enumerate(v.split())} for k, v in ORDER.items()}
 
@@ -340,26 +431,101 @@ def frag(xml_list):
 # ═════════════════════════════════════════════════════
 # 쪽 구성
 # ═════════════════════════════════════════════════════
+def page_background(rid):
+    """표지 전면 배경 그림 (글 뒤, 쪽 기준 0,0)."""
+    MEDIA.doc_pr += 1
+    cx, cy = int(8.5 * EMU), int(11 * EMU)
+    return (f'<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" '
+            f'behindDoc="1" locked="1" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/>'
+            f'<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>'
+            f'<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>'
+            f'<wp:extent cx="{cx}" cy="{cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/>'
+            f'<wp:docPr id="{MEDIA.doc_pr}" name="표지 배경"/><wp:cNvGraphicFramePr/>'
+            f'<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+            f'<pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="표지 배경"/><pic:cNvPicPr/></pic:nvPicPr>'
+            f'<pic:blipFill><a:blip r:embed="{rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+            f'<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm>'
+            f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic>'
+            f"</wp:anchor></w:drawing></w:r>")
+
+
+def pill(content, width, fill, height=560, border=None):
+    b = (f'<w:top w:val="single" w:sz="8" w:color="{border}"/><w:left w:val="single" w:sz="8" w:color="{border}"/>'
+         f'<w:bottom w:val="single" w:sz="8" w:color="{border}"/><w:right w:val="single" w:sz="8" w:color="{border}"/>'
+         if border else '<w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/>')
+    return (f'<w:tbl><w:tblPr><w:tblW w:w="{width}" w:type="dxa"/><w:jc w:val="center"/>'
+            f'<w:tblLayout w:type="fixed"/><w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" '
+            f'w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/></w:tblPr>'
+            f'<w:tblGrid><w:gridCol w:w="{width}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/>'
+            f'<w:trHeight w:val="{height}" w:hRule="exact"/><w:jc w:val="center"/></w:trPr>'
+            f'<w:tc><w:tcPr><w:tcW w:w="{width}" w:type="dxa"/><w:tcBorders>{b}</w:tcBorders>'
+            f'<w:shd w:val="clear" w:color="auto" w:fill="{fill}"/><w:vAlign w:val="center"/></w:tcPr>'
+            + para(content, jc="center", before=0, after=0, line=240) + "</w:tc></w:tr></w:tbl>")
+
+
 def cover():
-    badge = (f'<w:tbl><w:tblPr><w:tblStyle w:val="af9"/><w:tblW w:w="3000" w:type="dxa"/><w:jc w:val="center"/>'
-             f'<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/>'
-             f'<w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>'
-             f'<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'
-             f'</w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/>'
-             f'<w:trHeight w:val="560" w:hRule="exact"/><w:jc w:val="center"/></w:trPr>'
-             + cell([para([run("1단계", b=True, color="FFFFFF", sz=28), run("   01 / 12", b=True, color="FFFFFF", sz=28)],
-                           jc="center", before=0, after=0, line=240)], 3000, fill=CORAL)
-             + "</w:tr></w:tbl>")
+    bg = MEDIA.add(os.path.join(IMG, "cover_bg.png"))
     return [
-        para("", after=0, line=760, line_rule="exact"),
-        para([run("생각을 그리는 수학", b=True, color=NAVY, sz=64)], jc="center", before=0, after=300, line=240),
-        badge,
-        para("", after=0, line=560, line_rule="exact"),
-        fig("cover", 7.2, after=0),
-        para("", after=0, line=720, line_rule="exact"),
-        para([run("이름  ", b=True, sz=24), run("________________________", sz=24, color="8A99A6")],
-             jc="center", before=0, after=0),
+        para([page_background(bg)], before=0, after=0, line=648, line_rule="exact"),
+        para([run("생각하는 힘을 키우는 사고력 수학", b=True, color="DDF1F5", sz=24)],
+             jc="center", before=0, after=0, line=560, line_rule="exact"),
+        para([run("생각을 그리는 수학", b=True, color="FFFFFF", sz=80)],
+             jc="center", before=0, after=200, line=1040, line_rule="exact"),
+        pill([run("1단계", b=True, color="FFFFFF", sz=28), run("    01 / 12", b=True, color="FFFFFF", sz=28)],
+             3200, "EE8A4E"),
+        para("", before=0, after=0, line=10080, line_rule="exact"),
+        pill([run("이름   ", b=True, color="1D4E5C", sz=24), run("\u00a0" * 36, sz=24)], 5200, "FFFFFF",
+             height=620, border="9CC9D3"),
     ]
+
+
+def toc(first_page=3):
+    """안내 쪽 아래에 넣는 차례. 활동은 한 쪽씩이므로 쪽 번호는 순서대로 매긴다."""
+    rows = []
+    for i, (kind, num, title) in enumerate(TOC):
+        c = KIND[kind]
+        tag = num if num else "+"
+        rows.append((tag, title, str(first_page + i), c["main"]))
+    half = (len(rows) + 1) // 2
+    left, right = rows[:half], rows[half:]
+    widths = [700, 3800, 720, 300, 700, 3800, 720]
+    line = '<w:bottom w:val="dotted" w:sz="6" w:space="0" w:color="C9D7DE"/>'
+
+    def tc(content, w, jc="left", fill=None, bottom=True):
+        nil_bottom = '<w:bottom w:val="nil"/>'
+        bd = (f'<w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/>'
+              f'{line if bottom else nil_bottom}<w:right w:val="nil"/></w:tcBorders>')
+        shd = f'<w:shd w:val="clear" w:color="auto" w:fill="{fill}"/>' if fill else ""
+        return (f'<w:tc><w:tcPr><w:tcW w:w="{w}" w:type="dxa"/>{bd}{shd}<w:vAlign w:val="center"/></w:tcPr>'
+                + para(content, jc=jc, before=0, after=0, line=240) + "</w:tc>")
+
+    def cells(r):
+        if not r:
+            return tc("", 700, bottom=False) + tc("", 3800, bottom=False) + tc("", 720, bottom=False)
+        tag, title, page, col = r
+        return (tc([run(tag, b=True, color=col, sz=22)], 700, "center")
+                + tc([run(title, sz=21, color="263540")], 3800)
+                + tc([run(page, b=True, color="6B7B86", sz=20)], 720, "right"))
+
+    body = ""
+    for i in range(half):
+        body += ('<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="400" w:hRule="exact"/></w:trPr>'
+                 + cells(left[i]) + tc("", 300, bottom=False) + cells(right[i] if i < len(right) else None) + "</w:tr>")
+    tbl = (f'<w:tbl><w:tblPr><w:tblW w:w="{sum(widths)}" w:type="dxa"/><w:jc w:val="center"/>'
+           f'<w:tblLayout w:type="fixed"/><w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" '
+           f'w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/></w:tblPr><w:tblGrid>'
+           + "".join(f'<w:gridCol w:w="{w}"/>' for w in widths) + f"</w:tblGrid>{body}</w:tbl>")
+    legend = []
+    for kind in KIND:
+        legend += [run("\u00a0\u00a0\u00a0", shd=KIND[kind]["main"], sz=18), run(f" {kind}      ", sz=19, color="4A5A66")]
+    return [
+        para([run("차례", color="213446")], style="1", before=360, after=120),
+        para(legend, before=0, after=160),
+        tbl,
+    ]
+
+
+INTRO = []
 
 
 def reused_front(orig):
@@ -372,16 +538,18 @@ def reused_front(orig):
     for pb in ppr.findall(W + "pageBreakBefore"):
         ppr.remove(pb)
     ppr.insert(1, etree.fromstring(f'<w:pageBreakBefore {NSDECL}/>'))
-    out += intro
+    INTRO.extend(intro)
 
     # 기본 활동 01
     out += frag(header("기본 활동", "01", "곧은 선과 굽은 선", "도형을 이루는 선을 보고 분류해요."))
-    out += [keep(i) for i in (19, 20, 21, 22)]
+    out += [keep(i) for i in (19, 20, 21)]
+    out += frag([q("1", "도형의 기호를 알맞은 곳에 쓰세요")])
     out += frag([
         table([["곧은 선으로만\n이루어짐", "굽은 선으로만\n이루어짐", "곧은 선과 굽은 선이\n함께 있음"], ["", "", ""]],
               [3357, 3357, 3356], heights=[605, 605]),
     ])
-    out += [keep(24), keep(25)]
+    out += [keep(24)]
+    out += frag([q("2", "나만의 도형 두 개를 그리세요")])
     out += frag([
         para([run("왼쪽 칸에는 곧은 선만, 오른쪽 칸에는 곧은 선과 굽은 선을 함께 써서 그리세요.", sz=24)]),
         draw_box(["곧은 선만 사용한 도형", "곧은 선과 굽은 선을 함께 사용한 도형"], 2239 / TW, [5035, 5035]),
@@ -392,7 +560,15 @@ def reused_front(orig):
 
     # 기본 활동 02
     out += frag(header("기본 활동", "02", "삼각형을 찾아 그려요", "삼각형의 변과 꼭짓점을 알아보아요."))
-    out += [keep(i) for i in range(36, 48)]
+    for i in range(36, 48):
+        if i == 38:
+            out += frag([q("1", "삼각형을 모두 고르세요")])
+        elif i == 39:
+            out += frag([text(ANS)])
+        elif i == 44:
+            out += frag([q("2", "점을 이어 서로 다른 삼각형 두 개를 그리세요")])
+        else:
+            out.append(keep(i))
     out += frag(reflect("방향이 달라도 삼각형임을 설명할 수 있나요?"))
     return out
 
@@ -541,7 +717,7 @@ def pages():
           text("어린이 7명이 한 줄로 서 있어요. 유나는 뒤에서 세 번째에 서 있어요.\n유나의 앞에는 몇 명이 서 있을까요?"),
           para([run("앞   ○  ○  ○  ○  ○  ○  ○   뒤", sz=36)], jc="center", after=120),
           text("위 그림에서 유나에게 ✓표 하고, 유나 앞의 친구들을 세어 보세요."),
-          text("답  ______명        내가 센 방법  ________________________________"),
+          text("⟦답⟧ 명        내가 센 방법  ________________________________"),
           q("2", "긴 의자에 앉아요"),
           text("의자 하나에 3명씩 앉을 수 있어요. 어린이 10명이 첫째 의자부터 빈자리 없이 앉아요.\n마지막 의자에는 몇 명이 앉을까요?"),
           table([["첫째 의자", "둘째 의자", "셋째 의자", "넷째 의자"], ["○  ○  ○", "", "", ""]],
@@ -592,11 +768,11 @@ def pages():
           note("보기", ["아래가 1, 2, 3이면 가운데는 1 + 2 = 3, 2 + 3 = 5이고 꼭대기는 3 + 5 = 8이에요."]),
           q("1", "왼쪽 계단을 아래부터 채우세요"),
           q("2", "오른쪽 계단의 빈칸을 채우세요"),
-          fig("rId13"),
-          para([run("도움말", b=True, color=AMBER, sz=21), run("   오른쪽 가운데의 빈칸은 12 - 5로 찾을 수 있어요.", sz=21)]),
+          fig("rId13", 6.2),
+          note("도움말", ["오른쪽 가운데의 빈칸은 12 - 5로 찾을 수 있어요."]),
           q("3", "꼭대기를 10으로 만드세요"),
           text("맨 아래 세 칸에 1, 2, 5를 한 번씩 써요. 어느 수를 아래쪽 가운데에 놓아야 할까요?\n수를 바꿔 놓으며 확인해 보세요."),
-          fig("stairs_blank", 3.6),
+          fig("stairs_blank", 3.1),
           text("아래쪽 가운데에 놓은 수  ________")]
     P += reflect("거꾸로 계산해 빈칸을 찾았나요?")
 
@@ -612,7 +788,7 @@ def pages():
           q("3", "처음 수로 다시 계산해 확인하세요"),
           text("____ + 3 - 2 = ____        마지막 수가 9가 되었나요?  ________"),
           q("4", "처음 도토리가 1개 더 많았다면 남은 도토리는 몇 개일까요?"),
-          text("답  ______개        까닭"),
+          text("⟦답⟧ 개        까닭"),
           *write_lines(1)]
     P += reflect("거꾸로 갈 때 더하기와 빼기를 바꾸어 계산했나요?")
 
@@ -648,7 +824,7 @@ def pages():
           q("2", "만드는 방법이 두 가지인 풍선이 있나요?"),
           text("(있어요 , 없어요)      있다면 풍선의 수  ______"),
           q("3", "카드 1, 2, 4로 만들 수 없는 가장 작은 수는 얼마일까요?"),
-          text("답  ______        까닭  ____________________________________")]
+          text("⟦답⟧        까닭  ____________________________________")]
     P += reflect("풍선 1부터 7까지 빠뜨리지 않고 확인했나요?")
 
     # ── 생각 더하기 17 ──
@@ -670,7 +846,7 @@ def pages():
           after_table(),
           text("가운데에 2를 넣으면 합을 같게 만들 수 (있어요 , 없어요)."),
           q("4", "가운데에 올 수 있는 수를 모두 쓰세요"),
-          text("답  ________________________")]
+          text("⟦답⟧")]
     P += reflect("가운데 수를 뺀 네 수를 똑같이 나누어 보았나요?")
 
     # ── 생각 더하기 18 ──
@@ -782,7 +958,8 @@ def anchor_reflections(elements):
         return el.tag == W + "p" and el.find(f"{W}pPr/{W}framePr") is not None
 
     def is_goal(el):
-        return el.tag == W + "p" and "".join(el.itertext()).startswith("오늘의 목표")
+        cap = el.find(f"{W}tblPr/{W}tblCaption")
+        return el.tag == W + "tbl" and cap is not None and cap.get(W + "val") == "활동 머리"
 
     out, goal_pos, pending = [], None, []
     for el in elements:
@@ -814,8 +991,9 @@ def build():
 
     new = []
     new += frag(cover())
-    new += reused_front(orig)
-    new += frag(pages())
+    front = reused_front(orig)
+    rest = frag(pages())
+    new += INTRO + frag(toc()) + front + rest
     new = [normalize(el) for el in anchor_reflections(new)]
 
     sect = etree.fromstring(
@@ -831,16 +1009,20 @@ def build():
     body.append(sect)
 
     # 쪽 번호가 들어간 바닥글, 표지용 빈 바닥글
+    fld = lambda x: (f'<w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="19"/>'
+                     f'<w:shd w:val="clear" w:color="auto" w:fill="{KIND["기본 활동"]["main"]}"/></w:rPr>{x}</w:r>')
+    grey = lambda t: (f'<w:r><w:rPr><w:color w:val="7A8A96"/><w:sz w:val="17"/><w:lang w:eastAsia="ko-KR"/></w:rPr>'
+                      f'<w:t xml:space="preserve">{t}</w:t></w:r>')
     footer = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr {NSDECL}><w:p><w:pPr>'
-              f'<w:pStyle w:val="a6"/><w:jc w:val="right"/></w:pPr>'
-              f'<w:r><w:rPr><w:color w:val="7A8A96"/><w:sz w:val="17"/></w:rPr>'
-              f'<w:t xml:space="preserve">생각을 그리는 수학  ·  1단계 01     </w:t></w:r>'
-              f'<w:r><w:rPr><w:b/><w:color w:val="{TEAL}"/><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>'
-              f'<w:r><w:rPr><w:b/><w:color w:val="{TEAL}"/><w:sz w:val="18"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
-              f'<w:r><w:rPr><w:b/><w:color w:val="{TEAL}"/><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>'
-              f'<w:r><w:rPr><w:b/><w:color w:val="{TEAL}"/><w:sz w:val="18"/></w:rPr><w:t>2</w:t></w:r>'
-              f'<w:r><w:rPr><w:b/><w:color w:val="{TEAL}"/><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
-              f"</w:p></w:ftr>")
+              f'<w:pStyle w:val="a6"/><w:pBdr><w:top w:val="single" w:sz="6" w:space="6" w:color="D5E3E8"/></w:pBdr>'
+              f'<w:tabs><w:clear w:val="center" w:pos="4680"/><w:clear w:val="right" w:pos="9360"/>'
+              f'<w:tab w:val="center" w:pos="5610"/><w:tab w:val="right" w:pos="11220"/></w:tabs></w:pPr>'
+              + grey("생각을 그리는 수学".replace("学", "학")) + '<w:r><w:tab/></w:r>'
+              + fld('<w:t xml:space="preserve">\u00a0\u00a0</w:t>') + fld('<w:fldChar w:fldCharType="begin"/>')
+              + fld('<w:instrText xml:space="preserve"> PAGE </w:instrText>') + fld('<w:fldChar w:fldCharType="separate"/>')
+              + fld("<w:t>2</w:t>") + fld('<w:fldChar w:fldCharType="end"/>') + fld('<w:t xml:space="preserve">\u00a0\u00a0</w:t>')
+              + '<w:r><w:tab/></w:r>' + grey("1단계 01")
+              + "</w:p></w:ftr>")
     footer_first = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr {NSDECL}>'
                     f'<w:p><w:pPr><w:pStyle w:val="a6"/></w:pPr></w:p></w:ftr>')
 

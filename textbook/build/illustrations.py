@@ -22,9 +22,10 @@ SW = sw()
 OUT = os.path.join(os.path.dirname(__file__), "img")
 
 
-def svg(w, h, body):
+def svg(w, h, body, bg="#FFFFFF"):
+    rect = f'<rect width="{w}" height="{h}" fill="{bg}"/>' if bg else ""
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
-            f'viewBox="0 0 {w} {h}"><rect width="{w}" height="{h}" fill="#FFFFFF"/>{body}</svg>')
+            f'viewBox="0 0 {w} {h}">{rect}{body}</svg>')
 
 
 def label(x, y, t, size=34, weight="normal", color=TEXT, anchor="middle"):
@@ -32,9 +33,9 @@ def label(x, y, t, size=34, weight="normal", color=TEXT, anchor="middle"):
             f'fill="{color}" text-anchor="{anchor}">{t}</text>')
 
 
-def save(name, w, h, body, scale=1):
+def save(name, w, h, body, scale=1, bg="#FFFFFF"):
     os.makedirs(OUT, exist_ok=True)
-    cairosvg.svg2png(bytestring=svg(w, h, body).encode(), write_to=os.path.join(OUT, name + ".png"),
+    cairosvg.svg2png(bytestring=svg(w, h, body, bg).encode(), write_to=os.path.join(OUT, name + ".png"),
                      output_width=w * scale, output_height=h * scale)
     return (w, h)
 
@@ -213,9 +214,52 @@ def picnic():
     return save("picnic", w, h, b)
 
 
+# ── 표지 전면 배경 (8.5 x 11 인치, 150dpi 기준 좌표) ──
+COVER_BAND = "#2B8FA3"
+
+
+def cover_bg():
+    w, h = 1275, 1650
+    dots = "".join(f'<circle cx="{x}" cy="{y}" r="3" fill="#FFFFFF" opacity="0.18"/>'
+                   for x in range(60, w, 55) for y in range(40, 540, 55))
+    b = f"""
+  <rect width="{w}" height="{h}" fill="#FFF8EC"/>
+  <rect width="{w}" height="560" fill="{COVER_BAND}"/>
+  {dots}
+  <circle cx="1150" cy="90" r="190" fill="#FFFFFF" opacity="0.08"/>
+  <circle cx="110" cy="520" r="140" fill="#FFFFFF" opacity="0.07"/>
+  <path d="M0 540 C300 600 700 520 1275 590 L1275 560 L0 560 Z" fill="{COVER_BAND}"/>
+  <circle cx="1040" cy="760" r="95" fill="{YELLOW}"/>
+  <path d="M0 1330 C260 1270 560 1290 760 1320 C960 1350 1120 1310 1275 1290 L1275 1440 L0 1440 Z" fill="{MINT}"/>
+  <path d="M0 1380 C330 1350 640 1370 920 1390 C1080 1400 1200 1392 1275 1385" fill="none" stroke="#BFE3D5" stroke-width="6"/>
+  <path d="M130 1345 L240 1140 L350 1345 Z" fill="{PEACH}" {sw(6)}/>
+  <rect x="780" y="1150" width="190" height="190" rx="10" fill="{SKY}" {sw(6)}/>
+  <path d="M800 1150 L875 1030 L950 1150 Z" fill="{LAV}" {sw(6)}/>
+  <circle cx="1090" cy="1292" r="50" fill="{PINK}" {sw(6)}/>
+  {fox(520, 1350, 1.0)}
+  {bird(875, 1040, 1.2, flip=True)}
+  <rect y="1590" width="{w}" height="60" fill="#EE8A4E"/>
+"""
+    return save("cover_bg", w, h, b, scale=2, bg=None)
+
+
+# ── 작은 아이콘 (투명 배경) ──
+def icons():
+    from characters import _fox_body, _bird_body
+    save("icon_fox", 400, 290, f'<g transform="translate(200 530)">{_fox_body(head_only=True)}</g>', bg=None)
+    save("icon_bird", 200, 150, f'<g transform="translate(100 140)">{_bird_body()}</g>', bg=None)
+    face = lambda mouth: (f'<circle cx="60" cy="60" r="52" fill="#FFFFFF" stroke="{INK}" stroke-width="6"/>'
+                          f'<circle cx="42" cy="50" r="6" fill="{INK}"/><circle cx="78" cy="50" r="6" fill="{INK}"/>'
+                          f'<path d="{mouth}" fill="none" stroke="{INK}" stroke-width="6" stroke-linecap="round"/>')
+    save("face_good", 120, 120, face("M36 74 Q60 98 84 74"), bg=None)
+    save("face_ok", 120, 120, face("M40 80 Q60 90 80 80"), bg=None)
+    save("face_retry", 120, 120, face("M42 84 L78 84"), bg=None)
+    return (0, 0)
+
+
 def all_images():
     sizes = {}
-    for f in (cover, act03, act07, seats, stairs_blank, acorns, cards_balloons, crosses, bags, picnic):
+    for f in (cover, cover_bg, icons, act03, act07, seats, stairs_blank, acorns, cards_balloons, crosses, bags, picnic):
         sizes[f.__name__] = f()
     return sizes
 

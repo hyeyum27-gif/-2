@@ -20,8 +20,15 @@ BEAK = "#F2A04A"
 STROKE = 'stroke="%s" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"' % INK
 
 
-def _fox_body():
+def _fox_body(head_only=False):
     # 원점: 여우가 앉은 바닥 가운데. 높이 약 600.
+    full = _FOX_PARTS()
+    if head_only:
+        return full[full.index("  <path d=\"M-150 -385"):]
+    return full
+
+
+def _FOX_PARTS():
     return f"""
   <clipPath id="foxTail"><path d="M70 -40 C190 -20 250 -120 225 -215 C215 -260 175 -285 150 -262
            C170 -200 150 -120 60 -105 Z"/></clipPath>
