@@ -121,12 +121,12 @@
           <label for="f-school">학교 <span class="optional">(선택)</span></label>
           <input id="f-school" name="school" placeholder="예: 두실초등학교" autocomplete="off">
         </div>
+        <fieldset class="field span-2 courses">
+          <legend class="label">듣는 수업 <span class="optional">(여러 개 고를 수 있음)</span></legend>
+          <div class="chips" id="f-courses"></div>
+        </fieldset>
         <div class="field">
-          <label for="f-program">수업</label>
-          <select id="f-program" name="program"></select>
-        </div>
-        <div class="field">
-          <label for="f-week">주 수업 횟수</label>
+          <label for="f-week">정규 수업 주 횟수</label>
           <select id="f-week" name="perWeek">
             <option value="">선택 안 함</option>
             <option value="1">주1회</option><option value="2">주2회</option><option value="3">주3회</option>
