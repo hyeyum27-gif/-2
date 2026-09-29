@@ -47,7 +47,8 @@
 
     <!-- 도구 모음 -->
     <section class="toolbar" aria-label="학생 검색과 필터">
-      <input class="search" type="search" id="search" placeholder="이름, 학년, 반 검색" aria-label="학생 검색">
+      <input class="search" type="search" id="search" placeholder="이름, 학년, 학교 검색" aria-label="학생 검색">
+      <select class="school-filter" id="school-filter" aria-label="학교별 보기"></select>
       <div class="seg" role="radiogroup" aria-label="납부 상태 필터">
         <button type="button" role="radio" data-filter="all" aria-checked="true">전체</button>
         <button type="button" role="radio" data-filter="unpaid" aria-checked="false">미납</button>
@@ -119,7 +120,8 @@
         </div>
         <div class="field">
           <label for="f-school">학교 <span class="optional">(선택)</span></label>
-          <input id="f-school" name="school" placeholder="예: 두실초등학교" autocomplete="off">
+          <select id="f-school" name="school"></select>
+          <input id="f-school-other" placeholder="학교 이름 (예: 양정초등학교)" autocomplete="off" aria-label="학교 이름 직접 입력" hidden>
         </div>
         <fieldset class="field span-2 courses">
           <legend class="label">듣는 수업 <span class="optional">(여러 개 고를 수 있음)</span></legend>

@@ -52,6 +52,12 @@ body, .btn, input, select, button {
   background: var(--surface); color: var(--text); font-size: 16px;
 }
 .search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.school-filter {
+  min-height: 40px; padding: 8px 12px; max-width: 100%;
+  border: 1px solid var(--line); border-radius: var(--radius-control);
+  background: var(--surface); color: var(--text); font-size: 15px;
+}
+.school-filter:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .toolbar-actions { display: flex; gap: 8px; margin-left: auto; }
 @media (max-width: 767px) {
   .toolbar-actions { width: 100%; }

@@ -17,6 +17,14 @@
 const STORAGE_KEY = "haenaem-tuition-v1";
 const ACADEMY_NAME = "해냄수학전문학원";
 
+/* 학교 목록 — 학생 정보 창의 학교 선택지. 학교가 늘면 여기에 추가하세요. */
+const SCHOOLS = [
+  "두실초등학교", "장서초등학교", "구서초등학교", "동래초등학교", "삼육초등학교",
+  "동래여자중학교", "남산중학교", "구서여자중학교", "부산예술중학교",
+  "부산외국어고등학교", "브니엘고등학교", "동래여자고등학교", "보건고등학교",
+];
+const OTHER_SCHOOL = "__other";
+
 /*
   교육비 기준표 (원) — 교육비가 바뀌면 여기만 고치면 됩니다.
   초1~4 학년은 주 수업 횟수에 따라, 나머지는 학년에 따라 정해집니다.
@@ -78,6 +86,7 @@ let state = load();
 let viewMonth = toMonth(new Date());
 let filter = "all";
 let query = "";
+let schoolFilter = "";
 
 /* ---------- 교육비 기준표 ---------- */
 const isLowerElementary = (grade) => /^초[1-4]$/.test(grade);
@@ -121,6 +130,7 @@ function normalizeStudent(s) {
     delete s.program;
   }
   if (typeof s.regular !== "boolean") s.regular = true;
+  s.school = matchSchool(s.school);
   return s;
 }
 /* 메모에 수업 이름(공필왕 등)이 있으면 그 수업들 */
@@ -182,11 +192,14 @@ function render() {
   $("#stat-rate").textContent = `${rate}%`;
   $("#stat-meter").style.width = `${rate}%`;
 
+  renderSchoolFilter(all);
+
   // 목록
   const q = query.trim().toLowerCase();
   const visible = all.filter(({ s, st }) => {
     if (filter === "paid" && st.code !== "paid") return false;
     if (filter === "unpaid" && (st.code === "paid" || st.code === "nofee")) return false;
+    if (schoolFilter && (s.school || "") !== schoolFilter) return false;
     if (!q) return true;
     return [s.name, s.grade, s.school, s.className, s.phone].some((v) => String(v || "").toLowerCase().includes(q));
   });
@@ -242,6 +255,43 @@ function render() {
         <button class="btn btn-ghost btn-sm danger-text" type="button" data-action="delete">기록 삭제</button>
       </div>
     </li>`).join("");
+}
+
+/* 학교 필터: 이 달 청구 학생이 다니는 학교만, 목록 순서대로 (인원 표시) */
+function renderSchoolFilter(rows) {
+  const counts = {};
+  rows.forEach(({ s }) => { const k = s.school || ""; counts[k] = (counts[k] || 0) + 1; });
+  const order = (k) => (k === "" ? 999 : SCHOOLS.includes(k) ? SCHOOLS.indexOf(k) : 500);
+  const keys = Object.keys(counts).sort((a, b) => order(a) - order(b) || a.localeCompare(b, "ko"));
+  if (schoolFilter && !counts[schoolFilter]) schoolFilter = "";
+  $("#school-filter").innerHTML = `<option value="">전체 학교</option>` +
+    keys.map((k) => `<option value="${esc(k)}">${esc(k || "학교 없음")} (${counts[k]})</option>`).join("");
+  $("#school-filter").value = schoolFilter;
+}
+
+/* 명단의 학교 이름을 목록 이름에 맞춤: "부산삼육초등학교" → "삼육초등학교", "기타" → "" */
+function matchSchool(name) {
+  const n = String(name ?? "").trim();
+  if (!n || n === "기타" || n === "-") return "";
+  if (SCHOOLS.includes(n)) return n;
+  return SCHOOLS.find((x) => n.endsWith(x) || n.replace(/^부산/, "") === x) || n;
+}
+
+/* 학생 정보 창의 학교 선택: 목록 + (목록에 없는 학교) + 직접 입력 */
+function fillSchoolSelect(current) {
+  const extra = [...new Set(state.students.map((s) => s.school).filter((x) => x && !SCHOOLS.includes(x)))];
+  if (current && !SCHOOLS.includes(current) && !extra.includes(current)) extra.push(current);
+  const group = (label, re) => {
+    const items = SCHOOLS.filter((x) => re.test(x));
+    return items.length ? `<optgroup label="${label}">${items.map((x) => `<option>${esc(x)}</option>`).join("")}</optgroup>` : "";
+  };
+  $("#f-school").innerHTML = `<option value="">선택 안 함</option>` +
+    group("초등학교", /초등학교$/) + group("중학교", /중학교$/) + group("고등학교", /고등학교$/) +
+    (extra.length ? `<optgroup label="그 밖의 학교">${extra.map((x) => `<option>${esc(x)}</option>`).join("")}</optgroup>` : "") +
+    `<option value="${OTHER_SCHOOL}">직접 입력…</option>`;
+  $("#f-school").value = current || "";
+  $("#f-school-other").value = "";
+  $("#f-school-other").hidden = true;
 }
 
 /* "두실초등학교" → "두실초" */
@@ -323,7 +373,7 @@ function openStudent(id = null) {
   const grade = s?.grade ?? "중1";
   if (!$$("#f-grade option").some((o) => o.value === grade)) $("#f-grade").append(new Option(grade));
   $("#f-grade").value = grade;
-  $("#f-school").value = s?.school ?? "";
+  fillSchoolSelect(s?.school ?? "");
   $("#f-week").value = String(s?.perWeek || "");
   const courses = s ? normalizeStudent({ ...s }) : { regular: true, programs: [] };
   $$("#f-courses input").forEach((cb) => {
@@ -392,7 +442,7 @@ studentForm.addEventListener("submit", (e) => {
   const data = {
     name, fee,
     grade: $("#f-grade").value,
-    school: $("#f-school").value.trim(),
+    school: $("#f-school").value === OTHER_SCHOOL ? $("#f-school-other").value.trim() : $("#f-school").value,
     perWeek: Number($("#f-week").value) || 0,
     regular: formCourses().regular,
     programs: formCourses().programs,
@@ -600,7 +650,7 @@ function rosterFromRows(rows) {
     return {
       sourceId: sourceId || name,
       name,
-      school: get(r, "school"),
+      school: matchSchool(get(r, "school")),
       grade, perWeek, regular, programs,
       className: cls.length <= 12 ? cls : "",
       phone: get(r, "parentPhone") || get(r, "studentPhone") || get(r, "parentPhone2"),
@@ -738,6 +788,12 @@ function init() {
   $("#month-label").addEventListener("click", () => { viewMonth = toMonth(new Date()); render(); });
 
   $("#search").addEventListener("input", (e) => { query = e.target.value; render(); });
+  $("#school-filter").addEventListener("change", (e) => { schoolFilter = e.target.value; render(); });
+  $("#f-school").addEventListener("change", (e) => {
+    const other = e.target.value === OTHER_SCHOOL;
+    $("#f-school-other").hidden = !other;
+    if (other) $("#f-school-other").focus();
+  });
   setupSeg($(".toolbar .seg"), "data-filter", (v) => { filter = v; render(); });
   setupSeg($("#p-method"), "data-method", () => {});
 
