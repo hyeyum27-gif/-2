@@ -153,9 +153,17 @@
           <label for="f-start">등록한 달</label>
           <input id="f-start" name="startMonth" type="month" required>
         </div>
-        <div class="field">
+        <div class="field span-2">
           <label for="f-phone">보호자 연락처 <span class="optional">(선택)</span></label>
           <input id="f-phone" name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="f-mother">어머니 성함 <span class="optional">(선택)</span></label>
+          <input id="f-mother" name="motherName" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="f-father">아버지 성함 <span class="optional">(선택)</span></label>
+          <input id="f-father" name="fatherName" autocomplete="off">
         </div>
         <div class="field span-2">
           <label for="f-memo">청구 메모 <span class="optional">(목록에 보임)</span></label>
@@ -195,7 +203,22 @@
             <button type="button" role="radio" data-method="계좌이체" aria-checked="true">계좌이체</button>
             <button type="button" role="radio" data-method="카드" aria-checked="false">카드</button>
             <button type="button" role="radio" data-method="현금" aria-checked="false">현금</button>
+            <button type="button" role="radio" data-method="동백전" aria-checked="false">동백전</button>
+            <button type="button" role="radio" data-method="결제선생" aria-checked="false">결제선생</button>
           </div>
+        </div>
+        <!-- 동백전은 결제한 보호자 성함을 함께 적음 -->
+        <div class="field span-2 payer" id="p-payer-wrap" hidden>
+          <span class="label">동백전 결제자</span>
+          <div class="payer-row">
+            <div class="seg" role="radiogroup" aria-label="결제한 보호자" id="p-payer-rel">
+              <button type="button" role="radio" data-rel="어머니" aria-checked="true">어머니</button>
+              <button type="button" role="radio" data-rel="아버지" aria-checked="false">아버지</button>
+            </div>
+            <input id="p-payer" placeholder="성함" autocomplete="off" aria-label="결제한 보호자 성함">
+          </div>
+          <p class="field-error" id="p-payer-error" hidden>동백전은 결제한 분의 성함을 입력하세요.</p>
+          <p class="field-help">학생 정보에 저장되어 다음부터 자동으로 들어갑니다.</p>
         </div>
       </div>
       <div class="modal-actions">

@@ -3,9 +3,10 @@
   ------------------------------------------------------------
   데이터는 localStorage 의 STORAGE_KEY 한 곳에 JSON 으로 저장됩니다.
   {
-    students: [{ id, name, grade, school, regular, programs, className, perWeek, fee, dueDay, startMonth, endMonth, phone, memo, note,
+    students: [{ id, name, grade, school, regular, programs, className, perWeek, fee, dueDay, startMonth, endMonth, phone,
+                 motherName, fatherName, memo, note,
                  sourceId, enrollDate }],   // sourceId, enrollDate 는 엑셀 명단에서 불러온 학생만
-    payments: { "학생id|2026-09": { amount, date, method } }
+    payments: { "학생id|2026-09": { amount, date, method, payer } }   // payer: 동백전 결제자 { rel: "어머니", name }
   }
   startMonth ~ endMonth 사이의 달에만 교육비가 청구됩니다. (endMonth 가 없으면 재원 중)
   regular 는 정규 수업을 듣는지(기본 true), programs 는 함께 듣는 수업 이름 목록 (예: ["사고력"]).
@@ -205,7 +206,7 @@ function render() {
   });
 
   $("#student-list").innerHTML = visible.map(({ s, st }) => {
-    const record = st.pay ? `${st.pay.date.slice(5).replace("-", "/")} · ${esc(st.pay.method)} · ${won(st.pay.amount)}` : "";
+    const record = st.pay ? `${st.pay.date.slice(5).replace("-", "/")} · ${esc(methodText(st.pay))} · ${won(st.pay.amount)}` : "";
     const noFee = st.code === "nofee";
     const payLabel = st.code === "paid" ? "수정" : "납부";
     const meta = [s.grade, courseLabel(s), shortSchool(s.school), s.className, s.memo].filter(Boolean).join(" · ");
@@ -389,6 +390,8 @@ function openStudent(id = null) {
   $("#f-due").value = String(s?.dueDay ?? 1);
   $("#f-start").value = s?.startMonth ?? viewMonth;
   $("#f-phone").value = s?.phone ?? "";
+  $("#f-mother").value = s?.motherName ?? "";
+  $("#f-father").value = s?.fatherName ?? "";
   $("#f-memo").value = s?.memo ?? "";
   $("#withdraw-student").hidden = !s || !isActiveNow(s);
   $$("#student-form [aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
@@ -450,6 +453,8 @@ studentForm.addEventListener("submit", (e) => {
     dueDay: Number($("#f-due").value),
     startMonth: $("#f-start").value || viewMonth,
     phone: $("#f-phone").value.trim(),
+    motherName: $("#f-mother").value.trim(),
+    fatherName: $("#f-father").value.trim(),
     memo: $("#f-memo").value.trim(),
     note: $("#f-note").value.trim(),
   };
@@ -504,15 +509,34 @@ function openPay(id) {
   const lastDay = new Date(y, m, 0).getDate();
   const fallback = viewMonth === toMonth(new Date()) ? today : `${viewMonth}-${pad(Math.min(s.dueDay, lastDay))}`;
   $("#p-date").value = pay?.date ?? fallback;
-  setSeg($("#p-method"), "data-method", pay?.method ?? lastMethod(id));
+  const last = lastPayment(id);
+  setSeg($("#p-method"), "data-method", pay?.method ?? last?.method ?? "계좌이체");
+  const payer = pay?.payer ?? last?.payer;
+  setSeg($("#p-payer-rel"), "data-rel", payer?.rel ?? (s.motherName || !s.fatherName ? "어머니" : "아버지"));
+  syncPayer(true);
+  if (pay?.payer?.name) $("#p-payer").value = pay.payer.name;
   $("#unpay").hidden = !pay;
   payDialog.showModal();
 }
 
-/* 그 학생이 가장 최근에 쓴 납부 방법 */
-function lastMethod(id) {
+/* 그 학생의 가장 최근 납부 기록 (방법, 동백전 결제자 기본값용) */
+function lastPayment(id) {
   const keys = Object.keys(state.payments).filter((k) => k.startsWith(`${id}|`)).sort();
-  return keys.length ? state.payments[keys[keys.length - 1]].method : "계좌이체";
+  return keys.length ? state.payments[keys[keys.length - 1]] : null;
+}
+/* "동백전(어머니 김미영)" */
+function methodText(pay) {
+  return pay.payer?.name ? `${pay.method}(${pay.payer.rel} ${pay.payer.name})` : pay.method;
+}
+/* 동백전을 고르면 결제자 칸을 보이고, 어머니/아버지에 맞는 성함을 채움 */
+function syncPayer(fillName) {
+  const isDongbaek = segValue($("#p-method"), "data-method") === "동백전";
+  $("#p-payer-wrap").hidden = !isDongbaek;
+  $("#p-payer-error").hidden = true;
+  if (!isDongbaek || !fillName) return;
+  const s = state.students.find((x) => x.id === payingId);
+  const rel = segValue($("#p-payer-rel"), "data-rel");
+  $("#p-payer").value = (rel === "아버지" ? s?.fatherName : s?.motherName) || "";
 }
 
 payForm.addEventListener("submit", (e) => {
@@ -521,7 +545,17 @@ payForm.addEventListener("submit", (e) => {
   const date = $("#p-date").value;
   if (!amount) { $("#p-amount").focus(); return; }
   if (!date) { $("#p-date").focus(); return; }
-  state.payments[payKey(payingId, viewMonth)] = { amount, date, method: segValue($("#p-method"), "data-method") };
+  const method = segValue($("#p-method"), "data-method");
+  const record = { amount, date, method };
+  if (method === "동백전") {
+    const name = $("#p-payer").value.trim();
+    if (!name) { $("#p-payer-error").hidden = false; $("#p-payer").focus(); return; }
+    const rel = segValue($("#p-payer-rel"), "data-rel");
+    record.payer = { rel, name };
+    const s = state.students.find((x) => x.id === payingId);
+    if (s) s[rel === "아버지" ? "fatherName" : "motherName"] = name;
+  }
+  state.payments[payKey(payingId, viewMonth)] = record;
   save();
   payDialog.close();
   render();
@@ -569,9 +603,9 @@ function exportCsv() {
   const rows = billedRows(viewMonth);
   if (!rows.length) { toast("내보낼 학생이 없습니다"); return; }
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["이름", "학년", "수업", "학교", "반", "월 교육비", "받은 금액", "납부일", "납부 방법", "상태", "보호자 연락처", "메모"];
+  const head = ["이름", "학년", "수업", "학교", "반", "월 교육비", "받은 금액", "납부일", "납부 방법", "동백전 결제자", "상태", "보호자 연락처", "메모"];
   const body = rows.map(({ s, st }) => [
-    s.name, s.grade, courseLabel(s) || "정규", s.school, s.className, s.fee || "", st.paid, st.pay?.date, st.pay?.method,
+    s.name, s.grade, courseLabel(s) || "정규", s.school, s.className, s.fee || "", st.paid, st.pay?.date, st.pay?.method, st.pay?.payer ? `${st.pay.payer.rel} ${st.pay.payer.name}` : "",
     st.code === "partial" ? "일부 납부" : st.label, s.phone, s.memo,
   ].map(cell).join(","));
   // 엑셀에서 한글이 깨지지 않도록 BOM 을 붙임
@@ -795,7 +829,8 @@ function init() {
     if (other) $("#f-school-other").focus();
   });
   setupSeg($(".toolbar .seg"), "data-filter", (v) => { filter = v; render(); });
-  setupSeg($("#p-method"), "data-method", () => {});
+  setupSeg($("#p-method"), "data-method", () => syncPayer(!$("#p-payer").value));
+  setupSeg($("#p-payer-rel"), "data-rel", () => syncPayer(true));
 
   $("#add-student").addEventListener("click", () => openStudent());
   $("#copy-unpaid").addEventListener("click", copyUnpaid);

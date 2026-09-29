@@ -70,8 +70,16 @@ body, .btn, input, select, button {
   color: var(--text-muted); font-weight: 600; font-size: 14px; cursor: pointer;
 }
 .seg button[aria-checked="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
-.seg-wide { display: flex; }
-.seg-wide button { flex: 1; min-height: 40px; }
+.seg-wide { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+.seg-wide button { min-height: 40px; }
+.payer-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.payer-row .seg button { min-height: 40px; }
+.payer-row input {
+  flex: 1 1 140px; min-width: 0; min-height: 46px; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-control);
+  background: var(--bg); color: var(--text); font-size: 16px;
+}
+.payer-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 /* 학생 목록: 넓은 화면은 표처럼, 좁은 화면은 카드로 */
 .list-head, .student {
