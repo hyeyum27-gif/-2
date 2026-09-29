@@ -164,14 +164,20 @@ body, .btn, input, select, button {
 .modal { max-height: calc(100dvh - 32px); }
 .modal form { display: grid; gap: 18px; padding: 24px; }
 .fee-rows { display: grid; gap: 10px; }
-.fee-row { display: grid; grid-template-columns: 1fr 160px; gap: 12px; align-items: center; }
+.fee-row { display: grid; grid-template-columns: 1fr 180px; gap: 12px; align-items: center; }
 .fee-row label { font-weight: 600; }
-.fee-row label span { font-weight: 400; color: var(--text-muted); font-size: 14px; }
+.fee-row label span { display: block; font-weight: 400; color: var(--text-muted); font-size: 13px; }
+.fee-table { padding: 12px 14px; border-radius: var(--radius-control); background: var(--surface-alt); font-size: 14px; font-weight: 600; margin-top: -8px; }
+#fee-summary { margin-top: -6px; }
+.fee-rows { max-height: 50dvh; overflow-y: auto; }
+.fee-row select,
 .fee-row input {
   width: 100%; min-height: 44px; padding: 8px 12px; text-align: right;
   border: 1px solid var(--line); border-radius: var(--radius-control);
   background: var(--bg); color: var(--text); font-size: 16px; font-variant-numeric: tabular-nums;
 }
+.fee-row select { text-align: left; }
+.fee-row select:focus,
 .fee-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .modal h2 { font-size: 20px; }
 .modal-sub { margin-top: -12px; color: var(--text-muted); font-size: 14px; }

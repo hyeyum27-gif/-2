@@ -3,7 +3,7 @@
   ------------------------------------------------------------
   데이터는 localStorage 의 STORAGE_KEY 한 곳에 JSON 으로 저장됩니다.
   {
-    students: [{ id, name, grade, school, className, fee, dueDay, startMonth, endMonth, phone, memo, note,
+    students: [{ id, name, grade, school, className, perWeek, fee, dueDay, startMonth, endMonth, phone, memo, note,
                  sourceId, enrollDate }],   // sourceId, enrollDate 는 엑셀 명단에서 불러온 학생만
     payments: { "학생id|2026-09": { amount, date, method } }
   }
@@ -15,6 +15,18 @@
 
 const STORAGE_KEY = "haenaem-tuition-v1";
 const ACADEMY_NAME = "해냄수학전문학원";
+
+/*
+  교육비 기준표 (원) — 교육비가 바뀌면 여기만 고치면 됩니다.
+  초1~4 학년은 주 수업 횟수에 따라, 나머지는 학년에 따라 정해집니다.
+  이미 교육비가 들어간 학생은 바뀌지 않습니다. (학생 정보 창에서 직접 고치세요)
+*/
+const FEE_TABLE = {
+  lowerElementary: { 2: 140000, 3: 160000, 4: 180000, 5: 200000 }, // 초1~4: 주 2회, 3회, 4회, 5회
+  upperElementary: 250000, // 초5~6
+  middle: 300000,          // 중1~3
+  high: 350000,            // 고1~3
+};
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -56,6 +68,21 @@ let state = load();
 let viewMonth = toMonth(new Date());
 let filter = "all";
 let query = "";
+
+/* ---------- 교육비 기준표 ---------- */
+const isLowerElementary = (grade) => /^초[1-4]$/.test(grade);
+function feeFor(grade, perWeek) {
+  if (isLowerElementary(grade)) return FEE_TABLE.lowerElementary[perWeek] || 0;
+  if (/^초[56]$/.test(grade)) return FEE_TABLE.upperElementary;
+  if (/^중/.test(grade)) return FEE_TABLE.middle;
+  if (/^고/.test(grade)) return FEE_TABLE.high;
+  return 0;
+}
+/* 메모의 "월, 수, 금" 같은 요일 목록에서 주 수업 횟수 추측 */
+function guessPerWeek(text) {
+  const m = String(text || "").match(/[월화수목금토일](?:\s*[,，·/]\s*[월화수목금토일])+/);
+  return m ? new Set(m[0].match(/[월화수목금토일]/g)).size : 0;
+}
 
 /* ---------- 계산 ---------- */
 const payKey = (id, month) => `${id}|${month}`;
@@ -119,7 +146,7 @@ function render() {
     const record = st.pay ? `${st.pay.date.slice(5).replace("-", "/")} · ${esc(st.pay.method)} · ${won(st.pay.amount)}` : "";
     const noFee = st.code === "nofee";
     const payLabel = st.code === "paid" ? "수정" : "납부";
-    const meta = [s.grade, shortSchool(s.school), s.className, s.memo].filter(Boolean).join(" · ");
+    const meta = [s.grade, s.perWeek ? `주${s.perWeek}회` : "", shortSchool(s.school), s.className, s.memo].filter(Boolean).join(" · ");
     return `
       <li class="student" data-id="${s.id}">
         <div class="s-who">
@@ -223,10 +250,13 @@ function openStudent(id = null) {
   if (!$$("#f-grade option").some((o) => o.value === grade)) $("#f-grade").append(new Option(grade));
   $("#f-grade").value = grade;
   $("#f-school").value = s?.school ?? "";
+  $("#f-week").value = String(s?.perWeek || "");
   $("#f-note").value = s?.note ?? "";
   $("#f-class").value = s?.className ?? "";
   $("#f-fee").value = s?.fee ? s.fee.toLocaleString("ko-KR") : "";
-  $("#f-fee-help").hidden = !s || !!s.fee;
+  $("#f-fee").value ||= feeFor(grade, s?.perWeek) ? feeFor(grade, s?.perWeek).toLocaleString("ko-KR") : "";
+  lastAutoFee = feeFor(grade, s?.perWeek);
+  updateFeeHelp();
   $("#f-due").value = String(s?.dueDay ?? 1);
   $("#f-start").value = s?.startMonth ?? viewMonth;
   $("#f-phone").value = s?.phone ?? "";
@@ -236,6 +266,25 @@ function openStudent(id = null) {
   $$("#student-form .field-error").forEach((el) => { el.hidden = true; });
   studentDialog.showModal();
   if (s && !s.fee) $("#f-fee").focus();
+}
+
+/* 학년이나 주 횟수를 바꾸면, 기준표 금액을 그대로 쓰던 경우에만 교육비를 따라 바꿈 */
+let lastAutoFee = 0;
+function updateFeeHelp() {
+  const grade = $("#f-grade").value;
+  const auto = feeFor(grade, Number($("#f-week").value));
+  const help = $("#f-fee-help");
+  if (auto) help.textContent = `기준표: ${won(auto)}`;
+  else if (isLowerElementary(grade)) help.textContent = "초1~4는 주 수업 횟수(2~5회)를 고르면 기준표 금액이 들어갑니다.";
+  else help.textContent = "";
+  help.hidden = !help.textContent;
+}
+function onFeeBasisChange() {
+  const current = parseWon($("#f-fee").value);
+  const auto = feeFor($("#f-grade").value, Number($("#f-week").value));
+  if (!current || current === lastAutoFee) $("#f-fee").value = auto ? auto.toLocaleString("ko-KR") : "";
+  lastAutoFee = auto;
+  updateFeeHelp();
 }
 
 studentForm.addEventListener("submit", (e) => {
@@ -255,6 +304,7 @@ studentForm.addEventListener("submit", (e) => {
     name, fee,
     grade: $("#f-grade").value,
     school: $("#f-school").value.trim(),
+    perWeek: Number($("#f-week").value) || 0,
     className: $("#f-class").value.trim(),
     dueDay: Number($("#f-due").value),
     startMonth: $("#f-start").value || viewMonth,
@@ -373,9 +423,9 @@ function exportCsv() {
   const rows = billedRows(viewMonth);
   if (!rows.length) { toast("내보낼 학생이 없습니다"); return; }
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["이름", "학년", "학교", "반", "월 교육비", "받은 금액", "납부일", "납부 방법", "상태", "보호자 연락처", "메모"];
+  const head = ["이름", "학년", "주 횟수", "학교", "반", "월 교육비", "받은 금액", "납부일", "납부 방법", "상태", "보호자 연락처", "메모"];
   const body = rows.map(({ s, st }) => [
-    s.name, s.grade, s.school, s.className, s.fee || "", st.paid, st.pay?.date, st.pay?.method,
+    s.name, s.grade, s.perWeek ? `주${s.perWeek}회` : "", s.school, s.className, s.fee || "", st.paid, st.pay?.date, st.pay?.method,
     st.code === "partial" ? "일부 납부" : st.label, s.phone, s.memo,
   ].map(cell).join(","));
   // 엑셀에서 한글이 깨지지 않도록 BOM 을 붙임
@@ -441,15 +491,17 @@ function rosterFromRows(rows) {
     const name = get(r, "name") || sourceId.replace(/\d+$/, "");
     if (!name) return null;
     const cls = get(r, "className");
+    const grade = get(r, "grade") || "기타";
+    const perWeek = guessPerWeek(`${get(r, "note")} ${cls}`);
     return {
       sourceId: sourceId || name,
       name,
       school: get(r, "school"),
-      grade: get(r, "grade") || "기타",
+      grade, perWeek,
       className: cls.length <= 12 ? cls : "",
       phone: get(r, "parentPhone") || get(r, "studentPhone") || get(r, "parentPhone2"),
       enrollDate: normDate(get(r, "enrollDate")),
-      fee: parseWon(get(r, "fee")),
+      fee: parseWon(get(r, "fee")) || feeFor(grade, perWeek),
       note: [get(r, "note"), cls.length > 12 ? `수업반: ${cls}` : ""].filter(Boolean).join("\n"),
     };
   }).filter(Boolean);
@@ -469,13 +521,15 @@ async function importRoster(file) {
   const bySource = new Map(state.students.filter((s) => s.sourceId).map((s) => [s.sourceId, s]));
   const fresh = roster.filter((r) => !bySource.has(r.sourceId));
   const known = roster.length - fresh.length;
-  const noFee = fresh.filter((r) => !r.fee).length;
+  const withFee = fresh.filter((r) => r.fee).length;
+  const noFee = fresh.length - withFee;
 
   const msg = [
     `명단에서 학생 ${roster.length}명을 찾았습니다.`,
     fresh.length ? `· 새로 추가: ${fresh.length}명 (${monthText(thisMonth)}부터 청구)` : "",
     known ? `· 이미 있는 학생 ${known}명: 학교, 학년, 연락처만 새로 고침 (교육비와 납부 기록은 그대로)` : "",
-    noFee ? `· 파일에 교육비가 없어 ${noFee}명은 "교육비 미정"으로 들어갑니다. 다음 화면에서 학년별로 넣을 수 있습니다.` : "",
+    withFee ? `· 교육비 기준표대로 ${withFee}명의 교육비를 넣습니다.` : "",
+    noFee ? `· ${noFee}명은 주 수업 횟수를 몰라 "교육비 미정"으로 들어갑니다. 다음 화면에서 고를 수 있습니다.` : "",
   ].filter(Boolean).join("\n") + "\n\n불러올까요?";
   if (!confirm(msg)) return;
 
@@ -487,7 +541,8 @@ async function importRoster(file) {
         phone: r.phone || existing.phone,
         className: existing.className || r.className,
         note: existing.note || r.note,
-        fee: existing.fee || r.fee,
+        perWeek: existing.perWeek || r.perWeek,
+        fee: existing.fee || feeFor(r.grade, existing.perWeek || r.perWeek) || r.fee,
       });
       return;
     }
@@ -506,33 +561,48 @@ async function importRoster(file) {
   if (state.students.some((s) => isActiveNow(s) && !s.fee)) openBulkFee();
 }
 
-/* ---------- 학년별 교육비 일괄 입력 ---------- */
+/* ---------- 교육비 채우기 (기준표) ---------- */
 const GRADE_ORDER = ["초1", "초2", "초3", "초4", "초5", "초6", "중1", "중2", "중3", "고1", "고2", "고3"];
 const gradeRank = (g) => (GRADE_ORDER.includes(g) ? GRADE_ORDER.indexOf(g) : 99);
+const missingFee = () => state.students.filter((s) => isActiveNow(s) && !s.fee);
 
 function openBulkFee() {
-  const counts = {};
-  state.students.filter((s) => isActiveNow(s) && !s.fee).forEach((s) => { counts[s.grade] = (counts[s.grade] || 0) + 1; });
-  const grades = Object.keys(counts).sort((a, b) => gradeRank(a) - gradeRank(b) || a.localeCompare(b, "ko"));
-  if (!grades.length) { toast("교육비가 비어 있는 학생이 없습니다"); return; }
-  $("#fee-rows").innerHTML = grades.map((g, i) => `
+  const missing = missingFee();
+  if (!missing.length) { toast("교육비가 비어 있는 학생이 없습니다"); return; }
+  const auto = missing.filter((s) => feeFor(s.grade, s.perWeek));
+  const ask = missing.filter((s) => isLowerElementary(s.grade) && !feeFor(s.grade, s.perWeek))
+    .sort((a, b) => gradeRank(a.grade) - gradeRank(b.grade) || a.name.localeCompare(b.name, "ko"));
+  const other = missing.length - auto.length - ask.length;
+  const t = FEE_TABLE.lowerElementary;
+
+  $("#fee-table").textContent = `초1~4 주2회 ${won(t[2])} · 주3회 ${won(t[3])} · 주4회 ${won(t[4])} · 주5회 ${won(t[5])} / 초5~6 ${won(FEE_TABLE.upperElementary)} / 중등 ${won(FEE_TABLE.middle)} / 고등 ${won(FEE_TABLE.high)}`;
+  $("#fee-summary").textContent = [
+    auto.length ? `${auto.length}명은 학년에 맞춰 바로 들어갑니다.` : "",
+    ask.length ? `아래 초1~4 학생 ${ask.length}명은 주 몇 회인지 골라 주세요.` : "",
+    other ? `학년이 "기타"인 ${other}명은 목록에서 직접 넣어 주세요.` : "",
+  ].filter(Boolean).join(" ");
+  $("#fee-rows").innerHTML = ask.map((s) => `
     <div class="fee-row">
-      <label for="bulk-${i}">${esc(g)} <span>${counts[g]}명</span></label>
-      <input id="bulk-${i}" data-grade="${esc(g)}" inputmode="numeric" placeholder="원" autocomplete="off">
+      <label for="week-${s.id}">${esc(s.name)} <span>${esc([s.grade, shortSchool(s.school)].filter(Boolean).join(" · "))}${s.perWeek ? ` · 메모상 주${s.perWeek}회` : ""}</span></label>
+      <select id="week-${s.id}" data-id="${s.id}">
+        <option value="">모름 (미정)</option>
+        ${[2, 3, 4, 5].map((n) => `<option value="${n}">주${n}회 · ${won(t[n])}</option>`).join("")}
+      </select>
     </div>`).join("");
-  $$("#fee-rows input").forEach(formatMoneyInput);
   $("#fee-dialog").showModal();
+  ($("#fee-rows select") || $("#fee-form [type=submit]")).focus();
 }
 
 $("#fee-form").addEventListener("submit", (e) => {
   e.preventDefault();
+  $$("#fee-rows select").forEach((sel) => {
+    const s = state.students.find((x) => x.id === sel.dataset.id);
+    if (s && sel.value) s.perWeek = Number(sel.value);
+  });
   let changed = 0;
-  $$("#fee-rows input").forEach((input) => {
-    const fee = parseWon(input.value);
-    if (!fee) return;
-    state.students.forEach((s) => {
-      if (isActiveNow(s) && !s.fee && s.grade === input.dataset.grade) { s.fee = fee; changed++; }
-    });
+  missingFee().forEach((s) => {
+    const fee = feeFor(s.grade, s.perWeek);
+    if (fee) { s.fee = fee; changed++; }
   });
   save();
   $("#fee-dialog").close();
@@ -544,6 +614,8 @@ $("#fee-form").addEventListener("submit", (e) => {
 function init() {
   $("#f-due").innerHTML = Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}">매월 ${i + 1}일</option>`).join("");
   formatMoneyInput($("#f-fee"));
+  $("#f-grade").addEventListener("change", onFeeBasisChange);
+  $("#f-week").addEventListener("change", onFeeBasisChange);
   formatMoneyInput($("#p-amount"));
 
   $$("[data-month-step]").forEach((b) => b.addEventListener("click", () => {

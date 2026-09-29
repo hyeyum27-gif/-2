@@ -62,7 +62,7 @@
     <!-- 교육비 미정 안내 -->
     <div class="notice" id="nofee-notice" hidden>
       <p><strong id="nofee-count"></strong> 학생의 월 교육비가 아직 없습니다. 교육비를 넣어야 청구 목록 합계에 들어갑니다.</p>
-      <button class="btn btn-primary btn-sm" type="button" id="open-bulk-fee">학년별로 입력</button>
+      <button class="btn btn-primary btn-sm" type="button" id="open-bulk-fee">기준표로 채우기</button>
     </div>
 
     <!-- 학생 목록 -->
@@ -122,6 +122,14 @@
           <input id="f-school" name="school" placeholder="예: 두실초등학교" autocomplete="off">
         </div>
         <div class="field">
+          <label for="f-week">주 수업 횟수</label>
+          <select id="f-week" name="perWeek">
+            <option value="">선택 안 함</option>
+            <option value="1">주1회</option><option value="2">주2회</option><option value="3">주3회</option>
+            <option value="4">주4회</option><option value="5">주5회</option><option value="6">주6회</option>
+          </select>
+        </div>
+        <div class="field">
           <label for="f-class">반 <span class="optional">(선택)</span></label>
           <input id="f-class" name="className" placeholder="예: 원장 직강반" autocomplete="off">
         </div>
@@ -129,7 +137,7 @@
           <label for="f-fee">월 교육비 (원)</label>
           <input id="f-fee" name="fee" inputmode="numeric" placeholder="예: 250,000" required autocomplete="off">
           <p class="field-error" id="f-fee-error" hidden>금액을 입력하세요.</p>
-          <p class="field-help" id="f-fee-help" hidden>불러온 학생은 교육비가 비어 있습니다.</p>
+          <p class="field-help" id="f-fee-help" hidden></p>
         </div>
         <div class="field">
           <label for="f-due">납부 기준일</label>
@@ -193,11 +201,12 @@
     </form>
   </dialog>
 
-  <!-- 학년별 교육비 일괄 입력 -->
+  <!-- 교육비 채우기 (기준표는 js/manager.js 의 FEE_TABLE) -->
   <dialog class="modal" id="fee-dialog" aria-labelledby="fee-dialog-title">
     <form method="dialog" id="fee-form" novalidate>
-      <h2 id="fee-dialog-title">학년별 교육비 입력</h2>
-      <p class="modal-sub">교육비가 비어 있는 학생에게만 넣습니다. 학생마다 다르면 비워 두고 목록에서 한 명씩 입력하세요.</p>
+      <h2 id="fee-dialog-title">교육비 기준표로 채우기</h2>
+      <p class="fee-table" id="fee-table"></p>
+      <p class="modal-sub" id="fee-summary"></p>
       <div class="fee-rows" id="fee-rows"></div>
       <div class="modal-actions">
         <span class="spacer"></span>
