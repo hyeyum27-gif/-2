@@ -3,10 +3,12 @@
   ------------------------------------------------------------
   데이터는 localStorage 의 STORAGE_KEY 한 곳에 JSON 으로 저장됩니다.
   {
-    students: [{ id, name, grade, className, fee, dueDay, startMonth, endMonth, phone, memo }],
+    students: [{ id, name, grade, school, className, fee, dueDay, startMonth, endMonth, phone, memo, note,
+                 sourceId, enrollDate }],   // sourceId, enrollDate 는 엑셀 명단에서 불러온 학생만
     payments: { "학생id|2026-09": { amount, date, method } }
   }
   startMonth ~ endMonth 사이의 달에만 교육비가 청구됩니다. (endMonth 가 없으면 재원 중)
+  fee 가 0 이면 "교육비 미정"으로 보고 합계에서 뺍니다. (엑셀 명단에는 교육비가 없음)
   재등록한 학생은 쉬었던 기간이 breaks: [{ from, to }] 로 남아 그 달은 청구되지 않습니다.
   ------------------------------------------------------------
 */
@@ -65,6 +67,7 @@ const isActiveNow = (s) => !s.endMonth || s.endMonth >= toMonth(new Date());
 function statusOf(s, month) {
   const pay = state.payments[payKey(s.id, month)];
   const paid = pay ? pay.amount : 0;
+  if (!s.fee) return { code: "nofee", label: "교육비 미정", pay, paid };
   if (paid >= s.fee) return { code: "paid", label: "완납", pay, paid };
   if (paid > 0) return { code: "partial", label: `${won(s.fee - paid)} 남음`, pay, paid };
   const now = new Date();
@@ -83,7 +86,9 @@ function billedRows(month) {
 /* ---------- 화면 그리기 ---------- */
 function render() {
   $("#month-label").textContent = monthText(viewMonth);
-  const rows = billedRows(viewMonth);
+  const all = billedRows(viewMonth);
+  const rows = all.filter((r) => r.st.code !== "nofee");
+  const noFee = all.length - rows.length;
 
   // 요약
   const total = rows.reduce((t, r) => t + r.s.fee, 0);
@@ -91,7 +96,9 @@ function render() {
   const done = rows.filter((r) => r.st.code === "paid").length;
   const rate = total ? Math.round((paid / total) * 100) : 0;
   $("#stat-total").textContent = won(total);
-  $("#stat-count").textContent = `${rows.length}명`;
+  $("#stat-count").textContent = noFee ? `${rows.length}명 · 미정 ${noFee}명` : `${rows.length}명`;
+  $("#nofee-notice").hidden = !state.students.some((s) => isActiveNow(s) && !s.fee);
+  $("#nofee-count").textContent = `${state.students.filter((s) => isActiveNow(s) && !s.fee).length}명`;
   $("#stat-paid").textContent = won(paid);
   $("#stat-paid-count").textContent = `${done}명 완납`;
   $("#stat-unpaid").textContent = won(total - paid);
@@ -101,28 +108,32 @@ function render() {
 
   // 목록
   const q = query.trim().toLowerCase();
-  const visible = rows.filter(({ s, st }) => {
+  const visible = all.filter(({ s, st }) => {
     if (filter === "paid" && st.code !== "paid") return false;
-    if (filter === "unpaid" && st.code === "paid") return false;
+    if (filter === "unpaid" && (st.code === "paid" || st.code === "nofee")) return false;
     if (!q) return true;
-    return [s.name, s.grade, s.className, s.phone].some((v) => String(v || "").toLowerCase().includes(q));
+    return [s.name, s.grade, s.school, s.className, s.phone].some((v) => String(v || "").toLowerCase().includes(q));
   });
 
   $("#student-list").innerHTML = visible.map(({ s, st }) => {
     const record = st.pay ? `${st.pay.date.slice(5).replace("-", "/")} · ${esc(st.pay.method)} · ${won(st.pay.amount)}` : "";
+    const noFee = st.code === "nofee";
     const payLabel = st.code === "paid" ? "수정" : "납부";
+    const meta = [s.grade, shortSchool(s.school), s.className, s.memo].filter(Boolean).join(" · ");
     return `
       <li class="student" data-id="${s.id}">
         <div class="s-who">
           <span class="s-name">${esc(s.name)}</span>
-          <span class="s-meta">${esc([s.grade, s.className].filter(Boolean).join(" · "))}${s.memo ? ` · ${esc(s.memo)}` : ""}</span>
+          <span class="s-meta">${esc(meta)}</span>
         </div>
-        <span class="s-fee">${won(s.fee)}</span>
+        <span class="s-fee${noFee ? " is-empty" : ""}">${noFee ? "미정" : won(s.fee)}</span>
         <span class="s-due">매월 ${s.dueDay}일</span>
         <span class="badge badge-${st.code}">${st.label}</span>
         <span class="s-record">${record}</span>
         <div class="row-actions">
-          <button class="btn btn-sm ${st.code === "paid" ? "btn-ghost" : "btn-pay"}" type="button" data-action="pay">${payLabel}</button>
+          ${noFee
+            ? `<button class="btn btn-primary btn-sm" type="button" data-action="edit">교육비 입력</button>`
+            : `<button class="btn btn-sm ${st.code === "paid" ? "btn-ghost" : "btn-pay"}" type="button" data-action="pay">${payLabel}</button>`}
           <button class="btn btn-ghost btn-sm" type="button" data-action="edit">정보</button>
         </div>
       </li>`;
@@ -130,10 +141,11 @@ function render() {
 
   const empty = $("#empty");
   empty.hidden = visible.length > 0;
+  $("#empty-import").hidden = state.students.length > 0;
   if (!state.students.length) {
     $("#empty-title").textContent = "아직 등록된 학생이 없습니다";
     $("#empty-text").textContent = "\"학생 추가\"를 눌러 첫 학생을 등록하세요. 등록한 달부터 교육비가 청구 목록에 올라옵니다.";
-  } else if (!rows.length) {
+  } else if (!all.length) {
     $("#empty-title").textContent = `${monthText(viewMonth)}에 청구할 학생이 없습니다`;
     $("#empty-text").textContent = "등록한 달보다 이전이거나, 퇴원 이후의 달입니다.";
   } else {
@@ -154,6 +166,13 @@ function render() {
         <button class="btn btn-ghost btn-sm danger-text" type="button" data-action="delete">기록 삭제</button>
       </div>
     </li>`).join("");
+}
+
+/* "두실초등학교" → "두실초" */
+function shortSchool(name) {
+  if (!name || name === "기타" || name === "-") return "";
+  return name.replace(/초등학교$/, "초").replace(/(여자)?중학교$/, (m, f) => (f ? "여중" : "중"))
+    .replace(/(여자)?고등학교$/, (m, f) => (f ? "여고" : "고"));
 }
 
 /* ---------- 알림 ---------- */
@@ -200,9 +219,14 @@ function openStudent(id = null) {
   const s = id ? state.students.find((x) => x.id === id) : null;
   $("#student-dialog-title").textContent = s ? "학생 정보" : "학생 추가";
   $("#f-name").value = s?.name ?? "";
-  $("#f-grade").value = s?.grade ?? "중1";
+  const grade = s?.grade ?? "중1";
+  if (!$$("#f-grade option").some((o) => o.value === grade)) $("#f-grade").append(new Option(grade));
+  $("#f-grade").value = grade;
+  $("#f-school").value = s?.school ?? "";
+  $("#f-note").value = s?.note ?? "";
   $("#f-class").value = s?.className ?? "";
-  $("#f-fee").value = s ? s.fee.toLocaleString("ko-KR") : "";
+  $("#f-fee").value = s?.fee ? s.fee.toLocaleString("ko-KR") : "";
+  $("#f-fee-help").hidden = !s || !!s.fee;
   $("#f-due").value = String(s?.dueDay ?? 1);
   $("#f-start").value = s?.startMonth ?? viewMonth;
   $("#f-phone").value = s?.phone ?? "";
@@ -211,6 +235,7 @@ function openStudent(id = null) {
   $$("#student-form [aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
   $$("#student-form .field-error").forEach((el) => { el.hidden = true; });
   studentDialog.showModal();
+  if (s && !s.fee) $("#f-fee").focus();
 }
 
 studentForm.addEventListener("submit", (e) => {
@@ -229,11 +254,13 @@ studentForm.addEventListener("submit", (e) => {
   const data = {
     name, fee,
     grade: $("#f-grade").value,
+    school: $("#f-school").value.trim(),
     className: $("#f-class").value.trim(),
     dueDay: Number($("#f-due").value),
     startMonth: $("#f-start").value || viewMonth,
     phone: $("#f-phone").value.trim(),
     memo: $("#f-memo").value.trim(),
+    note: $("#f-note").value.trim(),
   };
   if (editingId) {
     Object.assign(state.students.find((x) => x.id === editingId), data);
@@ -316,7 +343,7 @@ $("#unpay").addEventListener("click", () => {
 
 /* ---------- 미납 안내 복사 ---------- */
 async function copyUnpaid() {
-  const rows = billedRows(viewMonth).filter((r) => r.st.code !== "paid");
+  const rows = billedRows(viewMonth).filter((r) => r.st.code !== "paid" && r.st.code !== "nofee");
   if (!rows.length) { toast(`${monthText(viewMonth)} 미납자가 없습니다`); return; }
   const [, m] = viewMonth.split("-").map(Number);
   const lines = rows.map(({ s, st }) => {
@@ -346,9 +373,9 @@ function exportCsv() {
   const rows = billedRows(viewMonth);
   if (!rows.length) { toast("내보낼 학생이 없습니다"); return; }
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["이름", "학년", "반", "월 교육비", "받은 금액", "납부일", "납부 방법", "상태", "보호자 연락처", "메모"];
+  const head = ["이름", "학년", "학교", "반", "월 교육비", "받은 금액", "납부일", "납부 방법", "상태", "보호자 연락처", "메모"];
   const body = rows.map(({ s, st }) => [
-    s.name, s.grade, s.className, s.fee, st.paid, st.pay?.date, st.pay?.method,
+    s.name, s.grade, s.school, s.className, s.fee || "", st.paid, st.pay?.date, st.pay?.method,
     st.code === "partial" ? "일부 납부" : st.label, s.phone, s.memo,
   ].map(cell).join(","));
   // 엑셀에서 한글이 깨지지 않도록 BOM 을 붙임
@@ -374,6 +401,145 @@ async function importJson(file) {
   }
 }
 
+/* ---------- 원생 명단 엑셀 불러오기 ---------- */
+// 학원 관리 프로그램에서 내려받은 명단의 열 이름. 앞에 있는 이름을 먼저 찾습니다.
+const ROSTER_COLUMNS = {
+  id: ["학생ID", "학생 ID", "원생ID"],
+  name: ["이름", "학생명", "학생 이름", "원생명"],
+  school: ["학교", "학교명"],
+  grade: ["학년"],
+  className: ["수업반", "반", "클래스"],
+  studentPhone: ["학생연락처", "학생 연락처"],
+  parentPhone: ["보호자1연락처", "보호자 연락처", "보호자연락처", "학부모 연락처", "학부모연락처"],
+  parentPhone2: ["보호자2연락처"],
+  enrollDate: ["입학일", "등록일", "입원일"],
+  fee: ["교육비", "수강료", "월 교육비"],
+  note: ["메모", "비고"],
+};
+const blank = (v) => {
+  const t = String(v ?? "").trim();
+  return t === "-" || t === ", " || t === "," ? "" : t;
+};
+function normDate(v) {
+  const m = blank(v).match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
+  return m ? `${m[1]}-${pad(m[2])}-${pad(m[3])}` : "";
+}
+
+function rosterFromRows(rows) {
+  const headerAt = rows.findIndex((r) => r.some((c) => ROSTER_COLUMNS.id.concat(ROSTER_COLUMNS.name).includes(blank(c))));
+  if (headerAt < 0) throw new Error("학생ID 또는 이름 열을 찾지 못했습니다");
+  const header = rows[headerAt].map(blank);
+  const col = {};
+  Object.entries(ROSTER_COLUMNS).forEach(([key, names]) => {
+    col[key] = names.map((n) => header.indexOf(n)).find((i) => i >= 0) ?? -1;
+  });
+  const get = (r, key) => (col[key] >= 0 ? blank(r[col[key]]) : "");
+
+  return rows.slice(headerAt + 1).map((r) => {
+    const sourceId = get(r, "id");
+    // 학생ID 는 "김찬호0" 처럼 이름 뒤에 동명이인 구분 숫자가 붙어 있음
+    const name = get(r, "name") || sourceId.replace(/\d+$/, "");
+    if (!name) return null;
+    const cls = get(r, "className");
+    return {
+      sourceId: sourceId || name,
+      name,
+      school: get(r, "school"),
+      grade: get(r, "grade") || "기타",
+      className: cls.length <= 12 ? cls : "",
+      phone: get(r, "parentPhone") || get(r, "studentPhone") || get(r, "parentPhone2"),
+      enrollDate: normDate(get(r, "enrollDate")),
+      fee: parseWon(get(r, "fee")),
+      note: [get(r, "note"), cls.length > 12 ? `수업반: ${cls}` : ""].filter(Boolean).join("\n"),
+    };
+  }).filter(Boolean);
+}
+
+async function importRoster(file) {
+  let roster;
+  try {
+    roster = rosterFromRows(await readTable(file));
+  } catch (err) {
+    toast(`명단을 읽지 못했습니다: ${err.message}`);
+    return;
+  }
+  if (!roster.length) { toast("명단에 학생이 없습니다"); return; }
+
+  const thisMonth = toMonth(new Date());
+  const bySource = new Map(state.students.filter((s) => s.sourceId).map((s) => [s.sourceId, s]));
+  const fresh = roster.filter((r) => !bySource.has(r.sourceId));
+  const known = roster.length - fresh.length;
+  const noFee = fresh.filter((r) => !r.fee).length;
+
+  const msg = [
+    `명단에서 학생 ${roster.length}명을 찾았습니다.`,
+    fresh.length ? `· 새로 추가: ${fresh.length}명 (${monthText(thisMonth)}부터 청구)` : "",
+    known ? `· 이미 있는 학생 ${known}명: 학교, 학년, 연락처만 새로 고침 (교육비와 납부 기록은 그대로)` : "",
+    noFee ? `· 파일에 교육비가 없어 ${noFee}명은 "교육비 미정"으로 들어갑니다. 다음 화면에서 학년별로 넣을 수 있습니다.` : "",
+  ].filter(Boolean).join("\n") + "\n\n불러올까요?";
+  if (!confirm(msg)) return;
+
+  roster.forEach((r) => {
+    const existing = bySource.get(r.sourceId);
+    if (existing) {
+      Object.assign(existing, {
+        name: r.name, school: r.school, grade: r.grade, enrollDate: r.enrollDate,
+        phone: r.phone || existing.phone,
+        className: existing.className || r.className,
+        note: existing.note || r.note,
+        fee: existing.fee || r.fee,
+      });
+      return;
+    }
+    // 입학일이 지난 학생도 청구는 이번 달부터 (이전 달이 모두 미납으로 보이지 않도록)
+    const enrollMonth = r.enrollDate.slice(0, 7);
+    state.students.push({
+      id: newId(), endMonth: null, memo: "", ...r,
+      startMonth: enrollMonth > thisMonth ? enrollMonth : thisMonth,
+      dueDay: r.enrollDate ? Number(r.enrollDate.slice(8, 10)) : 1,
+    });
+  });
+  save();
+  viewMonth = thisMonth;
+  render();
+  toast(`학생 ${roster.length}명을 불러왔습니다`);
+  if (state.students.some((s) => isActiveNow(s) && !s.fee)) openBulkFee();
+}
+
+/* ---------- 학년별 교육비 일괄 입력 ---------- */
+const GRADE_ORDER = ["초1", "초2", "초3", "초4", "초5", "초6", "중1", "중2", "중3", "고1", "고2", "고3"];
+const gradeRank = (g) => (GRADE_ORDER.includes(g) ? GRADE_ORDER.indexOf(g) : 99);
+
+function openBulkFee() {
+  const counts = {};
+  state.students.filter((s) => isActiveNow(s) && !s.fee).forEach((s) => { counts[s.grade] = (counts[s.grade] || 0) + 1; });
+  const grades = Object.keys(counts).sort((a, b) => gradeRank(a) - gradeRank(b) || a.localeCompare(b, "ko"));
+  if (!grades.length) { toast("교육비가 비어 있는 학생이 없습니다"); return; }
+  $("#fee-rows").innerHTML = grades.map((g, i) => `
+    <div class="fee-row">
+      <label for="bulk-${i}">${esc(g)} <span>${counts[g]}명</span></label>
+      <input id="bulk-${i}" data-grade="${esc(g)}" inputmode="numeric" placeholder="원" autocomplete="off">
+    </div>`).join("");
+  $$("#fee-rows input").forEach(formatMoneyInput);
+  $("#fee-dialog").showModal();
+}
+
+$("#fee-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  let changed = 0;
+  $$("#fee-rows input").forEach((input) => {
+    const fee = parseWon(input.value);
+    if (!fee) return;
+    state.students.forEach((s) => {
+      if (isActiveNow(s) && !s.fee && s.grade === input.dataset.grade) { s.fee = fee; changed++; }
+    });
+  });
+  save();
+  $("#fee-dialog").close();
+  render();
+  toast(changed ? `${changed}명의 교육비를 넣었습니다` : "바뀐 내용이 없습니다");
+});
+
 /* ---------- 이벤트 연결 ---------- */
 function init() {
   $("#f-due").innerHTML = Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}">매월 ${i + 1}일</option>`).join("");
@@ -394,6 +560,12 @@ function init() {
   $("#copy-unpaid").addEventListener("click", copyUnpaid);
   $("#export-csv").addEventListener("click", exportCsv);
   $("#export-json").addEventListener("click", exportJson);
+  $("#open-bulk-fee").addEventListener("click", openBulkFee);
+  $$("[data-import-roster]").forEach((input) => input.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importRoster(file);
+    e.target.value = "";
+  }));
   $("#import-json").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) importJson(file);

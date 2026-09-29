@@ -59,6 +59,12 @@
       </div>
     </section>
 
+    <!-- 교육비 미정 안내 -->
+    <div class="notice" id="nofee-notice" hidden>
+      <p><strong id="nofee-count"></strong> 학생의 월 교육비가 아직 없습니다. 교육비를 넣어야 청구 목록 합계에 들어갑니다.</p>
+      <button class="btn btn-primary btn-sm" type="button" id="open-bulk-fee">학년별로 입력</button>
+    </div>
+
     <!-- 학생 목록 -->
     <section aria-label="학생별 납부 현황">
       <div class="list-head" aria-hidden="true">
@@ -68,6 +74,7 @@
       <div class="empty" id="empty" hidden>
         <p class="empty-title" id="empty-title">아직 등록된 학생이 없습니다</p>
         <p class="empty-text" id="empty-text">"학생 추가"를 눌러 첫 학생을 등록하세요. 등록한 달부터 교육비가 청구 목록에 올라옵니다.</p>
+        <label class="btn btn-ghost btn-sm file-btn empty-import" id="empty-import">원생 명단 엑셀 불러오기<input type="file" data-import-roster accept=".xlsx,.csv"></label>
       </div>
     </section>
 
@@ -81,9 +88,10 @@
     <section class="backup" aria-labelledby="backup-title">
       <div>
         <h2 id="backup-title">백업</h2>
-        <p>기록은 이 기기의 브라우저에만 저장됩니다. 다른 기기로 옮기거나 기록을 지우기 전에 백업 파일을 저장하세요.</p>
+        <p>기록은 이 기기의 브라우저에만 저장됩니다. 다른 기기로 옮기거나 기록을 지우기 전에 백업 파일을 저장하세요. 원생 명단 엑셀도 이 브라우저 안에서만 읽고 어디로도 보내지 않습니다.</p>
       </div>
       <div class="backup-actions">
+        <label class="btn btn-ghost btn-sm file-btn">원생 명단 엑셀 불러오기<input type="file" data-import-roster accept=".xlsx,.csv"></label>
         <button class="btn btn-ghost btn-sm" type="button" id="export-csv">이번 달 엑셀(CSV)</button>
         <button class="btn btn-ghost btn-sm" type="button" id="export-json">백업 저장</button>
         <label class="btn btn-ghost btn-sm file-btn">백업 불러오기<input type="file" id="import-json" accept="application/json,.json"></label>
@@ -104,10 +112,14 @@
         <div class="field">
           <label for="f-grade">학년</label>
           <select id="f-grade" name="grade">
-            <option>초3</option><option>초4</option><option>초5</option><option>초6</option>
+            <option>초1</option><option>초2</option><option>초3</option><option>초4</option><option>초5</option><option>초6</option>
             <option>중1</option><option>중2</option><option>중3</option>
             <option>고1</option><option>고2</option><option>고3</option><option>기타</option>
           </select>
+        </div>
+        <div class="field">
+          <label for="f-school">학교 <span class="optional">(선택)</span></label>
+          <input id="f-school" name="school" placeholder="예: 두실초등학교" autocomplete="off">
         </div>
         <div class="field">
           <label for="f-class">반 <span class="optional">(선택)</span></label>
@@ -117,6 +129,7 @@
           <label for="f-fee">월 교육비 (원)</label>
           <input id="f-fee" name="fee" inputmode="numeric" placeholder="예: 250,000" required autocomplete="off">
           <p class="field-error" id="f-fee-error" hidden>금액을 입력하세요.</p>
+          <p class="field-help" id="f-fee-help" hidden>불러온 학생은 교육비가 비어 있습니다.</p>
         </div>
         <div class="field">
           <label for="f-due">납부 기준일</label>
@@ -131,8 +144,12 @@
           <input id="f-phone" name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" autocomplete="off">
         </div>
         <div class="field span-2">
-          <label for="f-memo">메모 <span class="optional">(선택)</span></label>
+          <label for="f-memo">청구 메모 <span class="optional">(목록에 보임)</span></label>
           <input id="f-memo" name="memo" placeholder="예: 형제 할인 2만원" autocomplete="off">
+        </div>
+        <div class="field span-2">
+          <label for="f-note">상담 메모 <span class="optional">(이 창에서만 보임)</span></label>
+          <textarea id="f-note" name="note" rows="3"></textarea>
         </div>
       </div>
       <div class="modal-actions">
@@ -176,8 +193,23 @@
     </form>
   </dialog>
 
+  <!-- 학년별 교육비 일괄 입력 -->
+  <dialog class="modal" id="fee-dialog" aria-labelledby="fee-dialog-title">
+    <form method="dialog" id="fee-form" novalidate>
+      <h2 id="fee-dialog-title">학년별 교육비 입력</h2>
+      <p class="modal-sub">교육비가 비어 있는 학생에게만 넣습니다. 학생마다 다르면 비워 두고 목록에서 한 명씩 입력하세요.</p>
+      <div class="fee-rows" id="fee-rows"></div>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" data-close>나중에</button>
+        <button class="btn btn-primary btn-sm" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="js/xlsx-reader.js"></script>
   <script src="js/manager.js"></script>
 </body>
 </html>
