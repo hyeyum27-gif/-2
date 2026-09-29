@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>교육비 관리 | 해냄수학전문학원</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/manager.css">
+</head>
+<body>
+  <!--
+    ============================================================
+    교육비 관리 (원장 전용 페이지)
+    - 사이트 메뉴에는 연결되어 있지 않습니다. 주소창에 /manager.html 로 들어오세요.
+    - 모든 기록은 이 브라우저(기기)에만 저장됩니다. 서버로 전송되지 않습니다.
+    - 기기를 바꾸거나 브라우저 기록을 지우기 전에 "백업 저장"을 꼭 눌러 두세요.
+    ============================================================
+  -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="해냄수학전문학원 홈으로">
+        <span class="brand-mark" aria-hidden="true">해</span>
+        <span class="brand-name">교육비 관리</span>
+      </a>
+      <div class="month-nav" role="group" aria-label="조회할 달">
+        <button class="icon-btn" type="button" data-month-step="-1" aria-label="이전 달">‹</button>
+        <button class="month-label" type="button" id="month-label" title="이번 달로 이동"></button>
+        <button class="icon-btn" type="button" data-month-step="1" aria-label="다음 달">›</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container mgr">
+    <!-- 요약 -->
+    <section class="stats" aria-label="이번 달 요약">
+      <div class="stat"><span class="stat-label">청구 예정</span><strong class="stat-value" id="stat-total">0원</strong><span class="stat-sub" id="stat-count"></span></div>
+      <div class="stat"><span class="stat-label">납부 완료</span><strong class="stat-value is-success" id="stat-paid">0원</strong><span class="stat-sub" id="stat-paid-count"></span></div>
+      <div class="stat"><span class="stat-label">미납</span><strong class="stat-value is-danger" id="stat-unpaid">0원</strong><span class="stat-sub" id="stat-unpaid-count"></span></div>
+      <div class="stat">
+        <span class="stat-label">납부율</span><strong class="stat-value" id="stat-rate">0%</strong>
+        <span class="meter" aria-hidden="true"><span class="meter-fill" id="stat-meter"></span></span>
+      </div>
+    </section>
+
+    <!-- 도구 모음 -->
+    <section class="toolbar" aria-label="학생 검색과 필터">
+      <input class="search" type="search" id="search" placeholder="이름, 학년, 반 검색" aria-label="학생 검색">
+      <div class="seg" role="radiogroup" aria-label="납부 상태 필터">
+        <button type="button" role="radio" data-filter="all" aria-checked="true">전체</button>
+        <button type="button" role="radio" data-filter="unpaid" aria-checked="false">미납</button>
+        <button type="button" role="radio" data-filter="paid" aria-checked="false">완납</button>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-ghost btn-sm" type="button" id="copy-unpaid">미납 안내 복사</button>
+        <button class="btn btn-primary btn-sm" type="button" id="add-student">+ 학생 추가</button>
+      </div>
+    </section>
+
+    <!-- 학생 목록 -->
+    <section aria-label="학생별 납부 현황">
+      <div class="list-head" aria-hidden="true">
+        <span>학생</span><span>월 교육비</span><span>납부 기준일</span><span>상태</span><span>납부 기록</span><span></span>
+      </div>
+      <ul class="student-list" id="student-list"></ul>
+      <div class="empty" id="empty" hidden>
+        <p class="empty-title" id="empty-title">아직 등록된 학생이 없습니다</p>
+        <p class="empty-text" id="empty-text">"학생 추가"를 눌러 첫 학생을 등록하세요. 등록한 달부터 교육비가 청구 목록에 올라옵니다.</p>
+      </div>
+    </section>
+
+    <!-- 퇴원생 -->
+    <details class="archived" id="archived-wrap" hidden>
+      <summary>퇴원생 <span id="archived-count"></span></summary>
+      <ul class="archived-list" id="archived-list"></ul>
+    </details>
+
+    <!-- 백업 -->
+    <section class="backup" aria-labelledby="backup-title">
+      <div>
+        <h2 id="backup-title">백업</h2>
+        <p>기록은 이 기기의 브라우저에만 저장됩니다. 다른 기기로 옮기거나 기록을 지우기 전에 백업 파일을 저장하세요.</p>
+      </div>
+      <div class="backup-actions">
+        <button class="btn btn-ghost btn-sm" type="button" id="export-csv">이번 달 엑셀(CSV)</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="export-json">백업 저장</button>
+        <label class="btn btn-ghost btn-sm file-btn">백업 불러오기<input type="file" id="import-json" accept="application/json,.json"></label>
+      </div>
+    </section>
+  </main>
+
+  <!-- 학생 추가/수정 -->
+  <dialog class="modal" id="student-dialog" aria-labelledby="student-dialog-title">
+    <form method="dialog" id="student-form" novalidate>
+      <h2 id="student-dialog-title">학생 추가</h2>
+      <div class="form-grid">
+        <div class="field span-2">
+          <label for="f-name">이름</label>
+          <input id="f-name" name="name" required autocomplete="off">
+          <p class="field-error" id="f-name-error" hidden>이름을 입력하세요.</p>
+        </div>
+        <div class="field">
+          <label for="f-grade">학년</label>
+          <select id="f-grade" name="grade">
+            <option>초3</option><option>초4</option><option>초5</option><option>초6</option>
+            <option>중1</option><option>중2</option><option>중3</option>
+            <option>고1</option><option>고2</option><option>고3</option><option>기타</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-class">반 <span class="optional">(선택)</span></label>
+          <input id="f-class" name="className" placeholder="예: 원장 직강반" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="f-fee">월 교육비 (원)</label>
+          <input id="f-fee" name="fee" inputmode="numeric" placeholder="예: 250,000" required autocomplete="off">
+          <p class="field-error" id="f-fee-error" hidden>금액을 입력하세요.</p>
+        </div>
+        <div class="field">
+          <label for="f-due">납부 기준일</label>
+          <select id="f-due" name="dueDay"></select>
+        </div>
+        <div class="field">
+          <label for="f-start">등록한 달</label>
+          <input id="f-start" name="startMonth" type="month" required>
+        </div>
+        <div class="field">
+          <label for="f-phone">보호자 연락처 <span class="optional">(선택)</span></label>
+          <input id="f-phone" name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" autocomplete="off">
+        </div>
+        <div class="field span-2">
+          <label for="f-memo">메모 <span class="optional">(선택)</span></label>
+          <input id="f-memo" name="memo" placeholder="예: 형제 할인 2만원" autocomplete="off">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm danger-text" type="button" id="withdraw-student" hidden>퇴원 처리</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" data-close>취소</button>
+        <button class="btn btn-primary btn-sm" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 납부 기록 -->
+  <dialog class="modal" id="pay-dialog" aria-labelledby="pay-dialog-title">
+    <form method="dialog" id="pay-form" novalidate>
+      <h2 id="pay-dialog-title">납부 기록</h2>
+      <p class="modal-sub" id="pay-dialog-sub"></p>
+      <div class="form-grid">
+        <div class="field">
+          <label for="p-amount">받은 금액 (원)</label>
+          <input id="p-amount" inputmode="numeric" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="p-date">납부일</label>
+          <input id="p-date" type="date" required>
+        </div>
+        <div class="field span-2">
+          <span class="label">납부 방법</span>
+          <div class="seg seg-wide" role="radiogroup" aria-label="납부 방법" id="p-method">
+            <button type="button" role="radio" data-method="계좌이체" aria-checked="true">계좌이체</button>
+            <button type="button" role="radio" data-method="카드" aria-checked="false">카드</button>
+            <button type="button" role="radio" data-method="현금" aria-checked="false">현금</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm danger-text" type="button" id="unpay" hidden>납부 취소</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" data-close>취소</button>
+        <button class="btn btn-primary btn-sm" type="submit">납부 완료</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/manager.js"></script>
+</body>
+</html>
