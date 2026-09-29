@@ -220,6 +220,20 @@
     </form>
   </dialog>
 
+  <!-- 확인 창 (js/manager.js 의 askConfirm) -->
+  <dialog class="modal modal-sm" id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p class="confirm-message" id="confirm-message"></p>
+      <textarea class="confirm-text" id="confirm-text" rows="8" readonly hidden aria-label="복사할 내용"></textarea>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" value="cancel" id="confirm-cancel">취소</button>
+        <button class="btn btn-primary btn-sm" value="ok" id="confirm-ok">확인</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="js/xlsx-reader.js"></script>

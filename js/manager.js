@@ -214,6 +214,31 @@ function shortSchool(name) {
     .replace(/(여자)?고등학교$/, (m, f) => (f ? "여고" : "고"));
 }
 
+/* ---------- 확인 창 ----------
+   브라우저 기본 confirm/prompt 는 휴대폰 앱이나 미리보기 화면에서 막히는 경우가 있어 직접 만든 창을 씁니다.
+   askConfirm({ title, message, ok, danger })  → 누른 버튼에 따라 true/false
+   askConfirm({ title, message, text })        → 복사할 글을 보여 주고 닫기 버튼만 */
+function askConfirm({ title, message = "", ok = "확인", danger = false, text = null }) {
+  const dlg = $("#confirm-dialog");
+  $("#confirm-title").textContent = title;
+  $("#confirm-message").textContent = message;
+  $("#confirm-message").hidden = !message;
+  const area = $("#confirm-text");
+  area.hidden = text === null;
+  area.value = text ?? "";
+  const okBtn = $("#confirm-ok");
+  okBtn.textContent = ok;
+  okBtn.hidden = text !== null;
+  okBtn.classList.toggle("btn-danger", danger);
+  $("#confirm-cancel").textContent = text !== null ? "닫기" : "취소";
+  dlg.returnValue = "";
+  dlg.showModal();
+  if (text !== null) { area.focus(); area.select(); } else okBtn.focus();
+  return new Promise((resolve) => {
+    dlg.addEventListener("close", () => resolve(dlg.returnValue === "ok"), { once: true });
+  });
+}
+
 /* ---------- 알림 ---------- */
 let toastTimer;
 function toast(msg) {
@@ -338,7 +363,7 @@ studentForm.addEventListener("submit", (e) => {
   render();
 });
 
-$("#withdraw-student").addEventListener("click", () => {
+$("#withdraw-student").addEventListener("click", async () => {
   const s = state.students.find((x) => x.id === editingId);
   if (!s) return;
   // 이번 달 교육비를 이미 받았으면 이번 달까지, 아니면 지난달까지 청구
@@ -346,7 +371,12 @@ $("#withdraw-student").addEventListener("click", () => {
   const paidThisMonth = state.payments[payKey(s.id, thisMonth)];
   const end = paidThisMonth ? thisMonth : shiftMonth(thisMonth, -1);
   const lastBilled = end < s.startMonth ? s.startMonth : end;
-  if (!confirm(`${s.name} 학생을 퇴원 처리할까요?\n${monthText(lastBilled)}까지만 교육비가 청구됩니다. 납부 기록은 남아 있습니다.`)) return;
+  const ok = await askConfirm({
+    title: `${s.name} 학생을 퇴원 처리할까요?`,
+    message: `${monthText(lastBilled)}까지만 교육비가 청구됩니다. 납부 기록은 남아 있고, 퇴원생 목록에서 다시 등록할 수 있습니다.`,
+    ok: "퇴원 처리", danger: true,
+  });
+  if (!ok) return;
   s.endMonth = lastBilled;
   save();
   studentDialog.close();
@@ -396,8 +426,8 @@ payForm.addEventListener("submit", (e) => {
   toast("납부 기록을 저장했습니다");
 });
 
-$("#unpay").addEventListener("click", () => {
-  if (!confirm("이 달 납부 기록을 지울까요?")) return;
+$("#unpay").addEventListener("click", async () => {
+  if (!(await askConfirm({ title: "이 달 납부 기록을 지울까요?", ok: "기록 지우기", danger: true }))) return;
   delete state.payments[payKey(payingId, viewMonth)];
   save();
   payDialog.close();
@@ -419,7 +449,7 @@ async function copyUnpaid() {
     await navigator.clipboard.writeText(text);
     toast("미납 목록을 복사했습니다");
   } catch {
-    prompt("아래 내용을 복사하세요", text);
+    askConfirm({ title: "미납 목록", message: "자동 복사가 막혀 있습니다. 아래 글을 길게 눌러 복사하세요.", text });
   }
 }
 
@@ -455,7 +485,12 @@ async function importJson(file) {
   try {
     const parsed = JSON.parse(await file.text());
     if (!isValidState(parsed)) throw new Error("형식 오류");
-    if (!confirm(`백업 파일의 학생 ${parsed.students.length}명 기록으로 지금 기록을 바꿀까요?\n지금 기록은 사라집니다.`)) return;
+    const ok = await askConfirm({
+      title: "백업으로 바꿀까요?",
+      message: `백업 파일의 학생 ${parsed.students.length}명 기록으로 바꿉니다. 지금 이 기기에 있는 기록은 사라집니다.`,
+      ok: "백업으로 바꾸기", danger: true,
+    });
+    if (!ok) return;
     state = { students: parsed.students, payments: parsed.payments };
     save();
     render();
@@ -546,7 +581,7 @@ async function importRoster(file) {
     withFee ? `· 교육비 기준표대로 ${withFee}명의 교육비를 넣습니다.` : "",
     noFee ? `· ${noFee}명은 주 수업 횟수를 몰라 "교육비 미정"으로 들어갑니다. 다음 화면에서 고를 수 있습니다.` : "",
   ].filter(Boolean).join("\n") + "\n\n불러올까요?";
-  if (!confirm(msg)) return;
+  if (!(await askConfirm({ title: "원생 명단 불러오기", message: msg.replace(/\n\n불러올까요\?$/, ""), ok: "불러오기" }))) return;
 
   roster.forEach((r) => {
     const existing = bySource.get(r.sourceId);
@@ -637,7 +672,7 @@ function init() {
   formatMoneyInput($("#f-fee"));
   $("#f-grade").addEventListener("change", onFeeBasisChange);
   $("#f-week").addEventListener("change", onFeeBasisChange);
-  $("#f-program").innerHTML = `<option value="">정규 수업 (학년·횟수 기준)</option>` +
+  $("#f-program").innerHTML = `<option value="">정규 수업</option>` +
     Object.entries(FEE_TABLE.programs).map(([n, fee]) => `<option value="${esc(n)}">${esc(n)} · ${won(fee)}</option>`).join("");
   $("#f-program").addEventListener("change", onFeeBasisChange);
   formatMoneyInput($("#p-amount"));
@@ -676,7 +711,7 @@ function init() {
     if (btn.dataset.action === "edit") openStudent(id);
   });
 
-  $("#archived-list").addEventListener("click", (e) => {
+  $("#archived-list").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-action]");
     if (!btn) return;
     const id = btn.closest("[data-id]").dataset.id;
@@ -690,7 +725,12 @@ function init() {
       toast(`${s.name} 학생을 재등록했습니다`);
     }
     if (btn.dataset.action === "delete") {
-      if (!confirm(`${s.name} 학생과 모든 납부 기록을 완전히 지울까요? 되돌릴 수 없습니다.`)) return;
+      const ok = await askConfirm({
+        title: `${s.name} 학생 기록을 삭제할까요?`,
+        message: "학생 정보와 모든 납부 기록이 지워지고 되돌릴 수 없습니다.",
+        ok: "완전히 삭제", danger: true,
+      });
+      if (!ok) return;
       state.students = state.students.filter((x) => x.id !== id);
       Object.keys(state.payments).forEach((k) => { if (k.startsWith(`${id}|`)) delete state.payments[k]; });
       toast("기록을 삭제했습니다");

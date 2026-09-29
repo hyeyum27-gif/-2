@@ -189,6 +189,14 @@ body, .btn, input, select, button {
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .span-2 { grid-column: auto; }
 }
+.modal-sm { width: min(440px, calc(100% - 32px)); }
+.confirm-message { color: var(--text-muted); font-size: 15px; white-space: pre-line; margin-top: -8px; }
+.confirm-text {
+  width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-control);
+  background: var(--bg); color: var(--text); font: inherit; font-size: 15px; resize: vertical;
+}
+.btn-danger { background: var(--danger); color: var(--on-accent); }
+.btn-danger:hover { background: var(--danger); filter: brightness(1.08); }
 .modal-actions { display: flex; gap: 8px; align-items: center; }
 .spacer { flex: 1; }
 .danger-text { color: var(--danger); }
