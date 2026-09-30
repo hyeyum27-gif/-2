@@ -7,7 +7,9 @@
                  motherName, fatherName, memo, note,
                  sourceId, enrollDate }],   // sourceId, enrollDate 는 엑셀 명단에서 불러온 학생만
     payments: { "학생id|2026-09": { amount, date, method, payer } },   // payer: 동백전 결제자 { rel: "어머니", name }
-    adjustments: { "학생id|2026-09": { billed, reason, missed, memo } } // 그 달만 청구 금액을 바꾼 기록 (여행, 아파서 차감 등)
+    adjustments: { "학생id|2026-09": { billed, reason, missed, memo } }, // 그 달만 청구 금액을 바꾼 기록 (여행, 아파서 차감 등)
+    reminders: { "학생id|2026-09": ["2026-09-30"] },               // 미납 안내 문자를 보낸 날
+    settings: { smsTemplate }
   }
   startMonth ~ endMonth 사이의 달에만 교육비가 청구됩니다. (endMonth 가 없으면 재원 중)
   regular 는 정규 수업을 듣는지(기본 true), programs 는 함께 듣는 수업 이름 목록 (예: ["사고력"]).
@@ -18,6 +20,9 @@
 
 const STORAGE_KEY = "haenaem-tuition-v1";
 const ACADEMY_NAME = "해냄수학전문학원";
+
+/* 미납 안내 문자 기본 문구. {이름} {월} {금액} {학원} 은 학생마다 바뀝니다. (화면에서 고친 문구가 우선) */
+const DEFAULT_SMS = "[{학원}] 안녕하세요, {이름} 학부모님.\n{월}월 교육비 {금액}이 아직 확인되지 않아 안내드립니다.\n이미 납부하셨다면 양해 부탁드립니다. 감사합니다.";
 
 /* 학교 목록 — 학생 정보 창의 학교 선택지. 학교가 늘면 여기에 추가하세요. */
 const SCHOOLS = [
@@ -67,7 +72,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 /* ---------- 저장소 ---------- */
-function emptyState() { return { students: [], payments: {}, adjustments: {} }; }
+function emptyState() { return { students: [], payments: {}, adjustments: {}, reminders: {}, settings: {} }; }
 function isValidState(s) {
   return s && Array.isArray(s.students) && s.payments && typeof s.payments === "object";
 }
@@ -77,6 +82,8 @@ function load() {
     if (!isValidState(parsed)) return emptyState();
     parsed.students.forEach(normalizeStudent);
     parsed.adjustments ||= {};
+    parsed.reminders ||= {};
+    parsed.settings ||= {};
     return parsed;
   } catch { return emptyState(); }
 }
@@ -225,7 +232,10 @@ function render() {
   });
 
   $("#student-list").innerHTML = visible.map(({ s, st }) => {
-    const record = st.pay ? `${st.pay.date.slice(5).replace("-", "/")} · ${esc(methodText(st.pay))} · ${won(st.pay.amount)}` : "";
+    const sent = st.code !== "paid" ? state.reminders[payKey(s.id, viewMonth)] : null;
+    const record = st.pay
+      ? `${st.pay.date.slice(5).replace("-", "/")} · ${esc(methodText(st.pay))} · ${won(st.pay.amount)}`
+      : sent?.length ? `안내 문자 ${sent[sent.length - 1].slice(5).replace("-", "/")} 보냄` : "";
     const noFee = st.code === "nofee";
     const payLabel = st.code === "paid" ? "납부 수정" : "납부";
     const meta = [s.grade, courseLabel(s), shortSchool(s.school), s.className, s.memo].filter(Boolean).join(" · ");
@@ -677,23 +687,110 @@ $("#a-clear").addEventListener("click", () => {
   toast("원래 교육비로 되돌렸습니다");
 });
 
-/* ---------- 미납 안내 복사 ---------- */
-async function copyUnpaid() {
-  const rows = billedRows(viewMonth).filter((r) => r.st.code !== "paid" && r.st.code !== "nofee");
-  if (!rows.length) { toast(`${monthText(viewMonth)} 미납자가 없습니다`); return; }
+/* ---------- 미납 안내 문자 ----------
+   학생마다 "문자 보내기"를 누르면 휴대폰 문자 앱이 번호와 문구가 채워진 채 열립니다. 전송은 원장님이 누릅니다.
+   (한 번에 자동 발송하려면 유료 문자 서비스와 서버가 필요해 여기서는 하지 않습니다) */
+const smsDialog = $("#sms-dialog");
+const smsTemplate = () => state.settings.smsTemplate || DEFAULT_SMS;
+
+function unpaidRows() {
+  return billedRows(viewMonth)
+    .filter((r) => r.st.code !== "paid" && r.st.code !== "nofee")
+    .map((r) => ({ ...r, left: r.st.billed - r.st.paid }));
+}
+
+function smsText(s, left) {
   const [, m] = viewMonth.split("-").map(Number);
-  const lines = rows.map(({ s, st }) => {
-    const left = st.billed - st.paid;
-    return `- ${s.name}(${s.grade}) ${won(left)}${s.phone ? ` / ${s.phone}` : ""}`;
-  });
-  const text = `[${ACADEMY_NAME}] ${m}월 교육비 미납 ${rows.length}명\n${lines.join("\n")}`;
+  return smsTemplate()
+    .replaceAll("{학원}", ACADEMY_NAME).replaceAll("{이름}", s.name)
+    .replaceAll("{월}", String(m)).replaceAll("{금액}", won(left));
+}
+
+function openSms() {
+  const rows = unpaidRows();
+  if (!rows.length) { toast(`${monthText(viewMonth)} 미납자가 없습니다`); return; }
+  $("#sms-dialog-title").textContent = `${monthText(viewMonth)} 미납 안내 문자`;
+  $("#sms-template").value = smsTemplate();
+  renderSmsList();
+  smsDialog.showModal();
+}
+
+function renderSmsList() {
+  const rows = unpaidRows();
+  const sentCount = rows.filter(({ s }) => state.reminders[payKey(s.id, viewMonth)]).length;
+  $("#sms-summary").textContent = `미납 ${rows.length}명 · 합계 ${won(rows.reduce((t, r) => t + r.left, 0))} · 문자 보낸 학생 ${sentCount}명`;
+  $("#sms-list").innerHTML = rows.map(({ s, left }) => {
+    const sent = state.reminders[payKey(s.id, viewMonth)] || [];
+    const digits = String(s.phone || "").replace(/\D/g, "");
+    const href = digits ? `sms:${digits}?&body=${encodeURIComponent(smsText(s, left))}` : "";
+    return `
+      <li data-id="${s.id}">
+        <div class="sms-who">
+          <span class="s-name">${esc(s.name)}</span>
+          <span class="s-meta">${esc(s.grade)} · ${won(left)}${s.phone ? ` · ${esc(s.phone)}` : ""}</span>
+          ${sent.length ? `<span class="sms-sent">${sent.map((d) => d.slice(5).replace("-", "/")).join(", ")} 보냄</span>` : ""}
+        </div>
+        <div class="row-actions">
+          ${href
+            ? `<a class="btn btn-sm ${sent.length ? "btn-ghost" : "btn-primary"}" href="${href}" data-action="send">${sent.length ? "다시 보내기" : "문자 보내기"}</a>`
+            : `<span class="sms-nophone">연락처 없음</span>`}
+          <button class="btn btn-ghost btn-sm" type="button" data-action="copy">복사</button>
+        </div>
+      </li>`;
+  }).join("");
+}
+
+async function copyText(text, done) {
   try {
     await navigator.clipboard.writeText(text);
-    toast("미납 목록을 복사했습니다");
+    toast(done);
   } catch {
-    askConfirm({ title: "미납 목록", message: "자동 복사가 막혀 있습니다. 아래 글을 길게 눌러 복사하세요.", text });
+    askConfirm({ title: "복사할 내용", message: "자동 복사가 막혀 있습니다. 아래 글을 길게 눌러 복사하세요.", text });
   }
 }
+
+/* 원장님 확인용: 미납자 전체 목록 */
+function copyUnpaidList() {
+  const rows = unpaidRows();
+  const [, m] = viewMonth.split("-").map(Number);
+  const lines = rows.map(({ s, left }) => `- ${s.name}(${s.grade}) ${won(left)}${s.phone ? ` / ${s.phone}` : ""}`);
+  copyText(`[${ACADEMY_NAME}] ${m}월 교육비 미납 ${rows.length}명\n${lines.join("\n")}`, "미납 목록을 복사했습니다");
+}
+
+function markSent(id) {
+  const key = payKey(id, viewMonth);
+  const today = toDate(new Date());
+  const list = state.reminders[key] || [];
+  if (!list.includes(today)) state.reminders[key] = [...list, today];
+  save();
+  renderSmsList();
+  render();
+}
+
+$("#sms-list").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+  const id = btn.closest("[data-id]").dataset.id;
+  const row = unpaidRows().find((r) => r.s.id === id);
+  if (!row) return;
+  // 링크가 문자 앱을 연 뒤에 목록을 다시 그림 (바로 그리면 누른 링크가 사라져 앱이 안 열림)
+  if (btn.dataset.action === "send") setTimeout(() => markSent(id), 400);
+  if (btn.dataset.action === "copy") { copyText(smsText(row.s, row.left), `${row.s.name} 학생 문자를 복사했습니다`); markSent(id); }
+});
+
+$("#sms-template").addEventListener("input", (e) => {
+  const v = e.target.value;
+  state.settings.smsTemplate = v.trim() && v !== DEFAULT_SMS ? v : "";
+  save();
+  renderSmsList();
+});
+$("#sms-reset").addEventListener("click", () => {
+  state.settings.smsTemplate = "";
+  $("#sms-template").value = DEFAULT_SMS;
+  save();
+  renderSmsList();
+});
+$("#sms-copy-all").addEventListener("click", copyUnpaidList);
 
 /* ---------- 내보내기, 불러오기 ---------- */
 function download(filename, content, type) {
@@ -733,7 +830,10 @@ async function importJson(file) {
       ok: "백업으로 바꾸기", danger: true,
     });
     if (!ok) return;
-    state = { students: parsed.students.map(normalizeStudent), payments: parsed.payments, adjustments: parsed.adjustments || {} };
+    state = {
+      students: parsed.students.map(normalizeStudent), payments: parsed.payments,
+      adjustments: parsed.adjustments || {}, reminders: parsed.reminders || {}, settings: parsed.settings || {},
+    };
     save();
     render();
     toast("백업을 불러왔습니다");
@@ -946,7 +1046,7 @@ function init() {
   setupSeg($("#p-payer-rel"), "data-rel", () => syncPayer(true));
 
   $("#add-student").addEventListener("click", () => openStudent());
-  $("#copy-unpaid").addEventListener("click", copyUnpaid);
+  $("#copy-unpaid").addEventListener("click", openSms);
   $("#export-csv").addEventListener("click", exportCsv);
   $("#export-json").addEventListener("click", exportJson);
   $("#open-bulk-fee").addEventListener("click", openBulkFee);

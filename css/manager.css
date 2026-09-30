@@ -207,6 +207,19 @@ body, .btn, input, select, button {
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .span-2 { grid-column: auto; }
 }
+.modal-wide { width: min(640px, calc(100% - 32px)); }
+.sms-list { max-height: 44dvh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+.sms-list li { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 12px 14px; border-top: 1px solid var(--line); }
+.sms-list li:first-child { border-top: 0; }
+.sms-who { display: grid; gap: 2px; min-width: 0; }
+.sms-sent { font-size: 13px; font-weight: 600; color: var(--success); }
+.sms-nophone { font-size: 13px; color: var(--text-muted); align-self: center; }
+.sms-list .row-actions .btn { min-height: 36px; padding: 0 12px; font-size: 14px; }
+#sms-template {
+  width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-control);
+  background: var(--bg); color: var(--text); font: inherit; font-size: 15px; resize: vertical;
+}
+#sms-template:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .modal-sm { width: min(440px, calc(100% - 32px)); }
 .confirm-message { color: var(--text-muted); font-size: 15px; white-space: pre-line; margin-top: -8px; }
 .confirm-text {
