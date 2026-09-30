@@ -188,6 +188,7 @@
     <form method="dialog" id="pay-form" novalidate>
       <h2 id="pay-dialog-title">납부 기록</h2>
       <p class="modal-sub" id="pay-dialog-sub"></p>
+      <p class="modal-link"><button class="text-btn" type="button" id="p-adjust">이번 달 금액 차감·수정</button></p>
       <div class="form-grid">
         <div class="field">
           <label for="p-amount">받은 금액 (원)</label>
@@ -240,6 +241,48 @@
       <div class="modal-actions">
         <span class="spacer"></span>
         <button class="btn btn-ghost btn-sm" type="button" data-close>나중에</button>
+        <button class="btn btn-primary btn-sm" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 이번 달 금액 조정 (여행, 아파서 차감 / 금액 수정) -->
+  <dialog class="modal" id="adj-dialog" aria-labelledby="adj-dialog-title">
+    <form method="dialog" id="adj-form" novalidate>
+      <h2 id="adj-dialog-title">금액 조정</h2>
+      <p class="modal-sub" id="adj-dialog-sub"></p>
+      <div class="form-grid">
+        <div class="field span-2">
+          <span class="label">사유</span>
+          <div class="seg seg-wide" role="radiogroup" aria-label="차감 사유" id="a-reason">
+            <button type="button" role="radio" data-reason="여행" aria-checked="true">여행</button>
+            <button type="button" role="radio" data-reason="아파서" aria-checked="false">아파서</button>
+            <button type="button" role="radio" data-reason="기타" aria-checked="false">기타</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="a-missed">빠진 수업 횟수</label>
+          <input id="a-missed" type="number" min="0" max="31" inputmode="numeric" placeholder="예: 2" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="a-minus">차감 금액 (원)</label>
+          <input id="a-minus" inputmode="numeric" placeholder="0" autocomplete="off">
+        </div>
+        <p class="field-help span-2" id="a-unit"></p>
+        <div class="field span-2">
+          <label for="a-billed">이번 달 청구 금액 (원)</label>
+          <input id="a-billed" inputmode="numeric" autocomplete="off">
+          <p class="field-help">직접 고쳐도 됩니다. 이 달에만 적용되고 다음 달은 원래 교육비로 돌아갑니다.</p>
+        </div>
+        <div class="field span-2">
+          <label for="a-memo">메모 <span class="optional">(선택)</span></label>
+          <input id="a-memo" placeholder="예: 9/15~9/19 제주 여행" autocomplete="off">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm danger-text" type="button" id="a-clear" hidden>원래대로</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" data-close>취소</button>
         <button class="btn btn-primary btn-sm" type="submit">저장</button>
       </div>
     </form>

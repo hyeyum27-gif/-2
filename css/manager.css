@@ -95,6 +95,10 @@ body, .btn, input, select, button {
 .s-meta { display: block; font-size: 13px; color: var(--text-muted); font-weight: 400; }
 .s-fee, .s-record { font-variant-numeric: tabular-nums; }
 .s-record { font-size: 14px; color: var(--text-muted); }
+.s-orig { margin-left: 4px; font-size: 13px; color: var(--text-muted); }
+.s-adj { display: block; font-size: 13px; color: var(--accent); font-weight: 600; }
+.modal-link { margin-top: -10px; }
+.text-btn { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .s-due { font-size: 14px; }
 
 .badge {

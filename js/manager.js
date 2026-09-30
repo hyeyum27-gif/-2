@@ -6,7 +6,8 @@
     students: [{ id, name, grade, school, regular, programs, className, perWeek, fee, dueDay, startMonth, endMonth, phone,
                  motherName, fatherName, memo, note,
                  sourceId, enrollDate }],   // sourceId, enrollDate 는 엑셀 명단에서 불러온 학생만
-    payments: { "학생id|2026-09": { amount, date, method, payer } }   // payer: 동백전 결제자 { rel: "어머니", name }
+    payments: { "학생id|2026-09": { amount, date, method, payer } },   // payer: 동백전 결제자 { rel: "어머니", name }
+    adjustments: { "학생id|2026-09": { billed, reason, missed, memo } } // 그 달만 청구 금액을 바꾼 기록 (여행, 아파서 차감 등)
   }
   startMonth ~ endMonth 사이의 달에만 교육비가 청구됩니다. (endMonth 가 없으면 재원 중)
   regular 는 정규 수업을 듣는지(기본 true), programs 는 함께 듣는 수업 이름 목록 (예: ["사고력"]).
@@ -66,7 +67,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 /* ---------- 저장소 ---------- */
-function emptyState() { return { students: [], payments: {} }; }
+function emptyState() { return { students: [], payments: {}, adjustments: {} }; }
 function isValidState(s) {
   return s && Array.isArray(s.students) && s.payments && typeof s.payments === "object";
 }
@@ -75,6 +76,7 @@ function load() {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!isValidState(parsed)) return emptyState();
     parsed.students.forEach(normalizeStudent);
+    parsed.adjustments ||= {};
     return parsed;
   } catch { return emptyState(); }
 }
@@ -151,16 +153,33 @@ const isBilled = (s, month) =>
   !(s.breaks || []).some((b) => b.from <= month && month <= b.to);
 const isActiveNow = (s) => !s.endMonth || s.endMonth >= toMonth(new Date());
 
+/* 그 달 청구 금액: 조정 기록이 있으면 그 금액, 없으면 월 교육비 */
+function billedFor(s, month) {
+  const adj = state.adjustments[payKey(s.id, month)];
+  return { billed: adj ? adj.billed : s.fee, adj };
+}
+
 function statusOf(s, month) {
   const pay = state.payments[payKey(s.id, month)];
   const paid = pay ? pay.amount : 0;
-  if (!s.fee) return { code: "nofee", label: "교육비 미정", pay, paid };
-  if (paid >= s.fee) return { code: "paid", label: "완납", pay, paid };
-  if (paid > 0) return { code: "partial", label: `${won(s.fee - paid)} 남음`, pay, paid };
+  const { billed, adj } = billedFor(s, month);
+  const base = { pay, paid, billed, adj };
+  if (!s.fee) return { code: "nofee", label: "교육비 미정", ...base };
+  if (billed <= 0 && !paid) return { code: "paid", label: "청구 없음", ...base };
+  if (paid >= billed) return { code: "paid", label: "완납", ...base };
+  if (paid > 0) return { code: "partial", label: `${won(billed - paid)} 남음`, ...base };
   const now = new Date();
   const thisMonth = toMonth(now);
   const late = month < thisMonth || (month === thisMonth && now.getDate() > s.dueDay);
-  return late ? { code: "late", label: "미납", pay, paid } : { code: "due", label: "납부 예정", pay, paid };
+  return late ? { code: "late", label: "미납", ...base } : { code: "due", label: "납부 예정", ...base };
+}
+
+/* 조정 내용 한 줄: "여행 2회 −40,000원" */
+function adjText(s, adj) {
+  if (!adj) return "";
+  const diff = s.fee - adj.billed;
+  const what = [adj.reason, adj.missed ? `${adj.missed}회` : ""].filter(Boolean).join(" ") || "금액 수정";
+  return diff > 0 ? `${what} −${won(diff)}` : diff < 0 ? `${what} +${won(-diff)}` : what;
 }
 
 function billedRows(month) {
@@ -178,8 +197,8 @@ function render() {
   const noFee = all.length - rows.length;
 
   // 요약
-  const total = rows.reduce((t, r) => t + r.s.fee, 0);
-  const paid = rows.reduce((t, r) => t + Math.min(r.st.paid, r.s.fee), 0);
+  const total = rows.reduce((t, r) => t + Math.max(r.st.billed, 0), 0);
+  const paid = rows.reduce((t, r) => t + Math.min(r.st.paid, Math.max(r.st.billed, 0)), 0);
   const done = rows.filter((r) => r.st.code === "paid").length;
   const rate = total ? Math.round((paid / total) * 100) : 0;
   $("#stat-total").textContent = won(total);
@@ -208,7 +227,7 @@ function render() {
   $("#student-list").innerHTML = visible.map(({ s, st }) => {
     const record = st.pay ? `${st.pay.date.slice(5).replace("-", "/")} · ${esc(methodText(st.pay))} · ${won(st.pay.amount)}` : "";
     const noFee = st.code === "nofee";
-    const payLabel = st.code === "paid" ? "수정" : "납부";
+    const payLabel = st.code === "paid" ? "납부 수정" : "납부";
     const meta = [s.grade, courseLabel(s), shortSchool(s.school), s.className, s.memo].filter(Boolean).join(" · ");
     return `
       <li class="student" data-id="${s.id}">
@@ -216,14 +235,17 @@ function render() {
           <span class="s-name">${esc(s.name)}</span>
           <span class="s-meta">${esc(meta)}</span>
         </div>
-        <span class="s-fee${noFee ? " is-empty" : ""}">${noFee ? "미정" : won(s.fee)}</span>
+        <span class="s-fee${noFee ? " is-empty" : ""}">${noFee ? "미정" : st.adj
+          ? `${won(st.billed)} <s class="s-orig">${won(s.fee)}</s><span class="s-adj">${esc(adjText(s, st.adj))}</span>`
+          : won(s.fee)}</span>
         <span class="s-due">매월 ${s.dueDay}일</span>
         <span class="badge badge-${st.code}">${st.label}</span>
         <span class="s-record">${record}</span>
         <div class="row-actions">
           ${noFee
             ? `<button class="btn btn-primary btn-sm" type="button" data-action="edit">교육비 입력</button>`
-            : `<button class="btn btn-sm ${st.code === "paid" ? "btn-ghost" : "btn-pay"}" type="button" data-action="pay">${payLabel}</button>`}
+            : `<button class="btn btn-sm ${st.code === "paid" ? "btn-ghost" : "btn-pay"}" type="button" data-action="pay">${payLabel}</button>
+               <button class="btn btn-ghost btn-sm" type="button" data-action="adjust">${st.adj ? "조정됨" : "차감·수정"}</button>`}
           <button class="btn btn-ghost btn-sm" type="button" data-action="edit">정보</button>
         </div>
       </li>`;
@@ -501,8 +523,11 @@ function openPay(id) {
   const s = state.students.find((x) => x.id === id);
   const pay = state.payments[payKey(id, viewMonth)];
   $("#pay-dialog-title").textContent = `${s.name} · ${monthText(viewMonth)}`;
-  $("#pay-dialog-sub").textContent = `월 교육비 ${won(s.fee)} · 매월 ${s.dueDay}일`;
-  $("#p-amount").value = (pay?.amount ?? s.fee).toLocaleString("ko-KR");
+  const { billed, adj } = billedFor(s, viewMonth);
+  $("#pay-dialog-sub").textContent = adj
+    ? `이번 달 청구 ${won(billed)} (월 교육비 ${won(s.fee)}, ${adjText(s, adj)}) · 매월 ${s.dueDay}일`
+    : `월 교육비 ${won(s.fee)} · 매월 ${s.dueDay}일`;
+  $("#p-amount").value = (pay?.amount ?? Math.max(billed, 0)).toLocaleString("ko-KR");
   const today = toDate(new Date());
   // 지난 달을 기록할 때는 그 달 기준일을 기본값으로
   const [y, m] = viewMonth.split("-").map(Number);
@@ -571,13 +596,94 @@ $("#unpay").addEventListener("click", async () => {
   toast("납부 기록을 지웠습니다");
 });
 
+/* ---------- 금액 조정 (여행, 아파서 차감 / 이번 달 금액 수정) ---------- */
+const adjDialog = $("#adj-dialog");
+let adjustingId = null;
+const round10 = (n) => Math.round(n / 10) * 10;
+
+/* 빠진 수업 1회 금액: 월 교육비 ÷ (주 횟수 × 4주). 주 횟수를 모르면 0 (직접 입력) */
+function sessionPrice(s) {
+  if (!s.perWeek) return 0;
+  const base = s.regular && s.programs.length ? regularFee(s.grade, s.perWeek) : s.fee;
+  return base / (s.perWeek * 4);
+}
+
+function openAdjust(id) {
+  adjustingId = id;
+  const s = state.students.find((x) => x.id === id);
+  const adj = state.adjustments[payKey(id, viewMonth)];
+  const unit = sessionPrice(s);
+  $("#adj-dialog-title").textContent = `${s.name} · ${monthText(viewMonth)} 금액 조정`;
+  $("#adj-dialog-sub").textContent = `월 교육비 ${won(s.fee)}`;
+  setSeg($("#a-reason"), "data-reason", adj?.reason ?? "여행");
+  $("#a-missed").value = adj?.missed || "";
+  $("#a-unit").textContent = unit
+    ? `1회 ${won(round10(unit))} (주${s.perWeek}회 × 4주 기준)`
+    : "주 수업 횟수가 없어 자동 계산이 안 됩니다. 차감 금액을 직접 적어 주세요.";
+  const billed = adj ? adj.billed : s.fee;
+  $("#a-minus").value = s.fee - billed > 0 ? (s.fee - billed).toLocaleString("ko-KR") : "";
+  $("#a-billed").value = billed.toLocaleString("ko-KR");
+  $("#a-memo").value = adj?.memo ?? "";
+  $("#a-clear").hidden = !adj;
+  adjDialog.showModal();
+  $("#a-missed").focus();
+}
+
+function adjSync(from) {
+  const s = state.students.find((x) => x.id === adjustingId);
+  if (!s) return;
+  const fmt = (n) => (n ? n.toLocaleString("ko-KR") : "");
+  if (from === "missed") {
+    const unit = sessionPrice(s);
+    if (!unit) return;
+    const minus = Math.min(round10(unit * (Number($("#a-missed").value) || 0)), s.fee);
+    $("#a-minus").value = fmt(minus);
+    $("#a-billed").value = (s.fee - minus).toLocaleString("ko-KR");
+  } else if (from === "minus") {
+    $("#a-billed").value = (s.fee - parseWon($("#a-minus").value)).toLocaleString("ko-KR");
+  } else if (from === "billed") {
+    const diff = s.fee - parseWon($("#a-billed").value);
+    $("#a-minus").value = diff > 0 ? fmt(diff) : "";
+  }
+}
+
+$("#adj-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const s = state.students.find((x) => x.id === adjustingId);
+  const key = payKey(adjustingId, viewMonth);
+  const raw = $("#a-billed").value.trim();
+  const billed = raw === "" ? s.fee : parseWon(raw);
+  const memo = $("#a-memo").value.trim();
+  if (billed === s.fee && !memo) delete state.adjustments[key];
+  else {
+    state.adjustments[key] = {
+      billed,
+      reason: segValue($("#a-reason"), "data-reason"),
+      missed: Number($("#a-missed").value) || 0,
+      memo,
+    };
+  }
+  save();
+  adjDialog.close();
+  render();
+  toast(state.adjustments[key] ? `${monthText(viewMonth)} 청구 금액을 ${won(billed)}으로 바꿨습니다` : "조정을 없앴습니다");
+});
+
+$("#a-clear").addEventListener("click", () => {
+  delete state.adjustments[payKey(adjustingId, viewMonth)];
+  save();
+  adjDialog.close();
+  render();
+  toast("원래 교육비로 되돌렸습니다");
+});
+
 /* ---------- 미납 안내 복사 ---------- */
 async function copyUnpaid() {
   const rows = billedRows(viewMonth).filter((r) => r.st.code !== "paid" && r.st.code !== "nofee");
   if (!rows.length) { toast(`${monthText(viewMonth)} 미납자가 없습니다`); return; }
   const [, m] = viewMonth.split("-").map(Number);
   const lines = rows.map(({ s, st }) => {
-    const left = s.fee - st.paid;
+    const left = st.billed - st.paid;
     return `- ${s.name}(${s.grade}) ${won(left)}${s.phone ? ` / ${s.phone}` : ""}`;
   });
   const text = `[${ACADEMY_NAME}] ${m}월 교육비 미납 ${rows.length}명\n${lines.join("\n")}`;
@@ -603,9 +709,9 @@ function exportCsv() {
   const rows = billedRows(viewMonth);
   if (!rows.length) { toast("내보낼 학생이 없습니다"); return; }
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["이름", "학년", "수업", "학교", "반", "월 교육비", "받은 금액", "납부일", "납부 방법", "동백전 결제자", "상태", "보호자 연락처", "메모"];
+  const head = ["이름", "학년", "수업", "학교", "반", "월 교육비", "이번 달 청구", "조정 내용", "받은 금액", "납부일", "납부 방법", "동백전 결제자", "상태", "보호자 연락처", "메모"];
   const body = rows.map(({ s, st }) => [
-    s.name, s.grade, courseLabel(s) || "정규", s.school, s.className, s.fee || "", st.paid, st.pay?.date, st.pay?.method, st.pay?.payer ? `${st.pay.payer.rel} ${st.pay.payer.name}` : "",
+    s.name, s.grade, courseLabel(s) || "정규", s.school, s.className, s.fee || "", s.fee ? st.billed : "", [adjText(s, st.adj), st.adj?.memo].filter(Boolean).join(" / "), st.paid, st.pay?.date, st.pay?.method, st.pay?.payer ? `${st.pay.payer.rel} ${st.pay.payer.name}` : "",
     st.code === "partial" ? "일부 납부" : st.label, s.phone, s.memo,
   ].map(cell).join(","));
   // 엑셀에서 한글이 깨지지 않도록 BOM 을 붙임
@@ -627,7 +733,7 @@ async function importJson(file) {
       ok: "백업으로 바꾸기", danger: true,
     });
     if (!ok) return;
-    state = { students: parsed.students.map(normalizeStudent), payments: parsed.payments };
+    state = { students: parsed.students.map(normalizeStudent), payments: parsed.payments, adjustments: parsed.adjustments || {} };
     save();
     render();
     toast("백업을 불러왔습니다");
@@ -814,6 +920,13 @@ function init() {
     .map(([value, label, fee]) => `<label class="chip"><input type="checkbox" value="${esc(value)}"><span>${esc(label)}${fee ? ` <small>${fee}</small>` : ""}</span></label>`).join("");
   $("#f-courses").addEventListener("change", onFeeBasisChange);
   formatMoneyInput($("#p-amount"));
+  formatMoneyInput($("#a-minus"));
+  formatMoneyInput($("#a-billed"));
+  setupSeg($("#a-reason"), "data-reason", () => {});
+  $("#a-missed").addEventListener("input", () => adjSync("missed"));
+  $("#a-minus").addEventListener("input", () => adjSync("minus"));
+  $("#a-billed").addEventListener("input", () => adjSync("billed"));
+  $("#p-adjust").addEventListener("click", () => { payDialog.close(); openAdjust(payingId); });
 
   $$("[data-month-step]").forEach((b) => b.addEventListener("click", () => {
     viewMonth = shiftMonth(viewMonth, Number(b.dataset.monthStep));
@@ -853,6 +966,7 @@ function init() {
     if (!btn) return;
     const id = btn.closest("[data-id]").dataset.id;
     if (btn.dataset.action === "pay") openPay(id);
+    if (btn.dataset.action === "adjust") openAdjust(id);
     if (btn.dataset.action === "edit") openStudent(id);
   });
 
@@ -878,6 +992,7 @@ function init() {
       if (!ok) return;
       state.students = state.students.filter((x) => x.id !== id);
       Object.keys(state.payments).forEach((k) => { if (k.startsWith(`${id}|`)) delete state.payments[k]; });
+      Object.keys(state.adjustments).forEach((k) => { if (k.startsWith(`${id}|`)) delete state.adjustments[k]; });
       toast("기록을 삭제했습니다");
     }
     save();
