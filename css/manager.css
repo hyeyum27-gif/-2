@@ -36,6 +36,9 @@ body, .btn, input, select, button {
 .stat-value.is-success { color: var(--success); }
 .stat-value.is-danger { color: var(--danger); }
 .stat-sub { font-size: 13px; color: var(--text-muted); }
+.stat-sub:empty { display: none; }
+.stat-label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.stat-toggle { font-size: 13px; }
 .meter { display: block; height: 6px; margin-top: 8px; border-radius: 999px; background: var(--surface-alt); overflow: hidden; }
 .meter-fill { display: block; height: 100%; width: 0; background: var(--success); border-radius: inherit; transition: width 0.4s var(--ease); }
 @media (max-width: 767px) {

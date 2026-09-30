@@ -36,11 +36,11 @@
   <main class="container mgr">
     <!-- 요약 -->
     <section class="stats" aria-label="이번 달 요약">
-      <div class="stat"><span class="stat-label">청구 예정</span><strong class="stat-value" id="stat-total">0원</strong><span class="stat-sub" id="stat-count"></span></div>
-      <div class="stat"><span class="stat-label">납부 완료</span><strong class="stat-value is-success" id="stat-paid">0원</strong><span class="stat-sub" id="stat-paid-count"></span></div>
-      <div class="stat"><span class="stat-label">미납</span><strong class="stat-value is-danger" id="stat-unpaid">0원</strong><span class="stat-sub" id="stat-unpaid-count"></span></div>
+      <div class="stat"><span class="stat-label">청구 대상</span><strong class="stat-value" id="stat-total">0명</strong><span class="stat-sub" id="stat-count"></span></div>
+      <div class="stat"><span class="stat-label">납부 완료</span><strong class="stat-value is-success" id="stat-paid">0명</strong><span class="stat-sub" id="stat-paid-count"></span></div>
+      <div class="stat"><span class="stat-label">미납</span><strong class="stat-value is-danger" id="stat-unpaid">0명</strong><span class="stat-sub" id="stat-unpaid-count"></span></div>
       <div class="stat">
-        <span class="stat-label">납부율</span><strong class="stat-value" id="stat-rate">0%</strong>
+        <span class="stat-label">납부율 <button class="text-btn stat-toggle" type="button" id="toggle-amounts" aria-pressed="false">금액 보기</button></span><strong class="stat-value" id="stat-rate">0%</strong>
         <span class="meter" aria-hidden="true"><span class="meter-fill" id="stat-meter"></span></span>
       </div>
     </section>

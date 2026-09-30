@@ -97,6 +97,8 @@ let viewMonth = toMonth(new Date());
 let filter = "all";
 let query = "";
 let schoolFilter = "";
+// 합계 금액은 다른 사람이 볼 수 있어 기본으로 가림. "금액 보기"를 누른 동안만 보이고 저장하지 않음
+let showAmounts = false;
 
 /* ---------- 교육비 기준표 ---------- */
 const isLowerElementary = (grade) => /^초[1-4]$/.test(grade);
@@ -208,14 +210,19 @@ function render() {
   const paid = rows.reduce((t, r) => t + Math.min(r.st.paid, Math.max(r.st.billed, 0)), 0);
   const done = rows.filter((r) => r.st.code === "paid").length;
   const rate = total ? Math.round((paid / total) * 100) : 0;
-  $("#stat-total").textContent = won(total);
-  $("#stat-count").textContent = noFee ? `${rows.length}명 · 미정 ${noFee}명` : `${rows.length}명`;
+  const partial = rows.filter((r) => r.st.code === "partial").length;
+  const late = rows.filter((r) => r.st.code === "late").length;
+  const money = (n) => (showAmounts ? won(n) : "");
+  $("#stat-total").textContent = `${rows.length}명`;
+  $("#stat-count").textContent = [money(total), noFee ? `교육비 미정 ${noFee}명` : ""].filter(Boolean).join(" · ");
   $("#nofee-notice").hidden = !state.students.some((s) => isActiveNow(s) && !s.fee);
   $("#nofee-count").textContent = `${state.students.filter((s) => isActiveNow(s) && !s.fee).length}명`;
-  $("#stat-paid").textContent = won(paid);
-  $("#stat-paid-count").textContent = `${done}명 완납`;
-  $("#stat-unpaid").textContent = won(total - paid);
-  $("#stat-unpaid-count").textContent = `${rows.length - done}명`;
+  $("#stat-paid").textContent = `${done}명`;
+  $("#stat-paid-count").textContent = money(paid);
+  $("#stat-unpaid").textContent = `${rows.length - done}명`;
+  $("#stat-unpaid-count").textContent = [money(total - paid), late ? `기한 지남 ${late}명` : "", partial ? `일부 납부 ${partial}명` : ""].filter(Boolean).join(" · ");
+  $("#toggle-amounts").textContent = showAmounts ? "금액 가리기" : "금액 보기";
+  $("#toggle-amounts").setAttribute("aria-pressed", String(showAmounts));
   $("#stat-rate").textContent = `${rate}%`;
   $("#stat-meter").style.width = `${rate}%`;
 
@@ -718,7 +725,7 @@ function openSms() {
 function renderSmsList() {
   const rows = unpaidRows();
   const sentCount = rows.filter(({ s }) => state.reminders[payKey(s.id, viewMonth)]).length;
-  $("#sms-summary").textContent = `미납 ${rows.length}명 · 합계 ${won(rows.reduce((t, r) => t + r.left, 0))} · 문자 보낸 학생 ${sentCount}명`;
+  $("#sms-summary").textContent = `미납 ${rows.length}명 · 문자 보낸 학생 ${sentCount}명`;
   $("#sms-list").innerHTML = rows.map(({ s, left }) => {
     const sent = state.reminders[payKey(s.id, viewMonth)] || [];
     const digits = String(s.phone || "").replace(/\D/g, "");
@@ -1035,6 +1042,7 @@ function init() {
   $("#month-label").addEventListener("click", () => { viewMonth = toMonth(new Date()); render(); });
 
   $("#search").addEventListener("input", (e) => { query = e.target.value; render(); });
+  $("#toggle-amounts").addEventListener("click", () => { showAmounts = !showAmounts; render(); });
   $("#school-filter").addEventListener("change", (e) => { schoolFilter = e.target.value; render(); });
   $("#f-school").addEventListener("change", (e) => {
     const other = e.target.value === OTHER_SCHOOL;
