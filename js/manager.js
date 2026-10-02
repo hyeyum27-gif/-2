@@ -4,7 +4,7 @@
   데이터는 localStorage 의 STORAGE_KEY 한 곳에 JSON 으로 저장됩니다.
   {
     students: [{ id, name, grade, school, regular, programs, className, perWeek, fee, dueDay, startMonth, endMonth, phone,
-                 motherName, fatherName, memo, note,
+                 motherName, fatherName, memo, note, withdrawDate, withdrawMemo,
                  sourceId, enrollDate }],   // sourceId, enrollDate 는 엑셀 명단에서 불러온 학생만
     payments: { "학생id|2026-09": { amount, date, method, payer } },   // payer: 동백전 결제자 { rel: "어머니", name }
     adjustments: { "학생id|2026-09": { billed, reason, missed, memo } }, // 그 달만 청구 금액을 바꾼 기록 (여행, 아파서 차감 등)
@@ -245,7 +245,8 @@ function render() {
       : sent?.length ? `안내 문자 ${sent[sent.length - 1].slice(5).replace("-", "/")} 보냄` : "";
     const noFee = st.code === "nofee";
     const payLabel = st.code === "paid" ? "납부 수정" : "납부";
-    const meta = [s.grade, courseLabel(s), shortSchool(s.school), s.className, s.memo].filter(Boolean).join(" · ");
+    const leaving = s.endMonth ? `퇴원 ${s.withdrawDate ? s.withdrawDate.slice(5).replace("-", "/") : `${monthText(s.endMonth)}까지`}` : "";
+    const meta = [s.grade, courseLabel(s), shortSchool(s.school), s.className, s.memo, leaving].filter(Boolean).join(" · ");
     return `
       <li class="student" data-id="${s.id}">
         <div class="s-who">
@@ -289,8 +290,9 @@ function render() {
   $("#archived-list").innerHTML = archived.map((s) => `
     <li data-id="${s.id}">
       <span class="s-name">${esc(s.name)}</span>
-      <span class="s-meta">${esc(s.grade)} · ${monthText(s.startMonth)} ~ ${monthText(s.endMonth)}</span>
+      <span class="s-meta">${esc(s.grade)} · ${s.withdrawDate ? `${s.withdrawDate.replaceAll("-", ".")} 그만둠 · ` : ""}${monthText(s.endMonth)}까지 청구${s.withdrawMemo ? ` · ${esc(s.withdrawMemo)}` : ""}</span>
       <div class="row-actions">
+        <button class="btn btn-ghost btn-sm" type="button" data-action="withdraw">퇴원 정보 수정</button>
         <button class="btn btn-ghost btn-sm" type="button" data-action="restore">재등록</button>
         <button class="btn btn-ghost btn-sm danger-text" type="button" data-action="delete">기록 삭제</button>
       </div>
@@ -432,7 +434,8 @@ function openStudent(id = null) {
   $("#f-mother").value = s?.motherName ?? "";
   $("#f-father").value = s?.fatherName ?? "";
   $("#f-memo").value = s?.memo ?? "";
-  $("#withdraw-student").hidden = !s || !isActiveNow(s);
+  $("#withdraw-student").hidden = !s;
+  $("#withdraw-student").textContent = s?.endMonth ? "퇴원 정보 수정" : "퇴원 처리";
   $$("#student-form [aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
   $$("#student-form .field-error").forEach((el) => { el.hidden = true; });
   studentDialog.showModal();
@@ -509,26 +512,78 @@ studentForm.addEventListener("submit", (e) => {
   render();
 });
 
-$("#withdraw-student").addEventListener("click", async () => {
-  const s = state.students.find((x) => x.id === editingId);
-  if (!s) return;
-  // 이번 달 교육비를 이미 받았으면 이번 달까지, 아니면 지난달까지 청구
-  const thisMonth = toMonth(new Date());
-  const paidThisMonth = state.payments[payKey(s.id, thisMonth)];
-  const end = paidThisMonth ? thisMonth : shiftMonth(thisMonth, -1);
-  const lastBilled = end < s.startMonth ? s.startMonth : end;
-  const ok = await askConfirm({
-    title: `${s.name} 학생을 퇴원 처리할까요?`,
-    message: `${monthText(lastBilled)}까지만 교육비가 청구됩니다. 납부 기록은 남아 있고, 퇴원생 목록에서 다시 등록할 수 있습니다.`,
-    ok: "퇴원 처리", danger: true,
-  });
-  if (!ok) return;
-  s.endMonth = lastBilled;
-  save();
-  studentDialog.close();
-  render();
-  toast(`${s.name} 학생을 퇴원 처리했습니다`);
+/* ---------- 퇴원 (그만둔 날짜, 마지막 청구 달 정하기 / 고치기) ---------- */
+const wdDialog = $("#wd-dialog");
+let withdrawingId = null;
+let wdEndTouched = false;
+
+/* 그만둔 달 교육비를 이미 받았으면 그 달까지, 아니면 전달까지 청구 (등록한 달보다 앞설 수는 없음) */
+function defaultEndMonth(s, date) {
+  const m = date.slice(0, 7);
+  const end = state.payments[payKey(s.id, m)] ? m : shiftMonth(m, -1);
+  return end < s.startMonth ? s.startMonth : end;
+}
+
+function openWithdraw(id) {
+  withdrawingId = id;
+  const s = state.students.find((x) => x.id === id);
+  const done = Boolean(s.endMonth);
+  const date = s.withdrawDate || toDate(new Date());
+  $("#wd-dialog-title").textContent = done ? `${s.name} 퇴원 정보 수정` : `${s.name} 퇴원 처리`;
+  $("#wd-date").value = date;
+  $("#wd-end").value = s.endMonth || defaultEndMonth(s, date);
+  $("#wd-memo").value = s.withdrawMemo || "";
+  $("#wd-cancel-withdraw").hidden = !done;
+  $("#wd-submit").textContent = done ? "저장" : "퇴원 처리";
+  wdEndTouched = done;
+  updateWdHelp();
+  wdDialog.showModal();
+  $("#wd-date").focus();
+}
+
+function updateWdHelp() {
+  const end = $("#wd-end").value;
+  $("#wd-help").textContent = end
+    ? `${monthText(end)}까지 교육비가 청구되고, ${monthText(shiftMonth(end, 1))}부터 청구 목록에서 빠집니다. 납부 기록은 그대로 남습니다.`
+    : "";
+}
+
+$("#wd-date").addEventListener("change", () => {
+  const s = state.students.find((x) => x.id === withdrawingId);
+  if (s && $("#wd-date").value && !wdEndTouched) $("#wd-end").value = defaultEndMonth(s, $("#wd-date").value);
+  updateWdHelp();
 });
+$("#wd-end").addEventListener("change", () => { wdEndTouched = true; updateWdHelp(); });
+
+$("#wd-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const s = state.students.find((x) => x.id === withdrawingId);
+  const date = $("#wd-date").value;
+  const end = $("#wd-end").value;
+  if (!date) { $("#wd-date").focus(); return; }
+  if (!end) { $("#wd-end").focus(); return; }
+  const first = !s.endMonth;
+  Object.assign(s, { withdrawDate: date, endMonth: end, withdrawMemo: $("#wd-memo").value.trim() });
+  save();
+  wdDialog.close();
+  if (studentDialog.open) studentDialog.close();
+  render();
+  toast(first ? `${s.name} 학생을 퇴원 처리했습니다` : `${s.name} 학생 퇴원 정보를 고쳤습니다`);
+});
+
+/* 잘못 퇴원 처리한 경우: 퇴원 기록을 없애고 계속 다니는 것으로 (쉰 기간 없이) */
+$("#wd-cancel-withdraw").addEventListener("click", () => {
+  const s = state.students.find((x) => x.id === withdrawingId);
+  Object.assign(s, { endMonth: null, withdrawDate: "", withdrawMemo: "" });
+  save();
+  wdDialog.close();
+  if (studentDialog.open) studentDialog.close();
+  render();
+  toast(`${s.name} 학생 퇴원을 취소했습니다`);
+});
+
+$("#withdraw-student").addEventListener("click", () => openWithdraw(editingId));
+
 
 /* ---------- 납부 기록 ---------- */
 const payDialog = $("#pay-dialog");
@@ -1083,12 +1138,13 @@ function init() {
     if (!btn) return;
     const id = btn.closest("[data-id]").dataset.id;
     const s = state.students.find((x) => x.id === id);
+    if (btn.dataset.action === "withdraw") { openWithdraw(id); return; }
     if (btn.dataset.action === "restore") {
       // 퇴원 다음 달부터 지난달까지는 쉰 기간으로 남겨 청구하지 않음
       const from = shiftMonth(s.endMonth, 1);
       const to = shiftMonth(toMonth(new Date()), -1);
       if (from <= to) s.breaks = [...(s.breaks || []), { from, to }];
-      s.endMonth = null;
+      Object.assign(s, { endMonth: null, withdrawDate: "", withdrawMemo: "" });
       toast(`${s.name} 학생을 재등록했습니다`);
     }
     if (btn.dataset.action === "delete") {

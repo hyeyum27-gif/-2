@@ -308,6 +308,34 @@
     </form>
   </dialog>
 
+  <!-- 퇴원: 그만둔 날짜, 마지막 청구 달 -->
+  <dialog class="modal modal-sm" id="wd-dialog" aria-labelledby="wd-dialog-title">
+    <form method="dialog" id="wd-form" novalidate>
+      <h2 id="wd-dialog-title">퇴원 처리</h2>
+      <div class="form-grid">
+        <div class="field">
+          <label for="wd-date">그만둔 날짜</label>
+          <input id="wd-date" type="date" required>
+        </div>
+        <div class="field">
+          <label for="wd-end">마지막 청구 달</label>
+          <input id="wd-end" type="month" required>
+        </div>
+        <p class="field-help span-2" id="wd-help"></p>
+        <div class="field span-2">
+          <label for="wd-memo">사유·메모 <span class="optional">(선택)</span></label>
+          <input id="wd-memo" placeholder="예: 이사, 다른 학원 이동" autocomplete="off">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-sm danger-text" type="button" id="wd-cancel-withdraw" hidden>퇴원 취소</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" data-close>닫기</button>
+        <button class="btn btn-primary btn-sm" type="submit" id="wd-submit">퇴원 처리</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- 확인 창 (js/manager.js 의 askConfirm) -->
   <dialog class="modal modal-sm" id="confirm-dialog" aria-labelledby="confirm-title">
     <form method="dialog">
