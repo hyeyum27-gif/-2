@@ -34,6 +34,7 @@
   </header>
 
   <main class="container mgr">
+    <p class="sync-status" id="sync-status" role="status" hidden></p>
     <!-- 요약 -->
     <section class="stats" aria-label="이번 달 요약">
       <div class="stat"><span class="stat-label">청구 대상</span><strong class="stat-value" id="stat-total">0명</strong><span class="stat-sub" id="stat-count"></span></div>
@@ -354,5 +355,6 @@
 
   <script src="js/xlsx-reader.js"></script>
   <script src="js/manager.js"></script>
+  <script src="js/cloud-sync.js"></script>
 </body>
 </html>

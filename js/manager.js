@@ -87,9 +87,16 @@ function load() {
     return parsed;
   } catch { return emptyState(); }
 }
+function saveLocal() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); return true; }
+  catch { return false; }
+}
+// 온라인 저장(js/cloud-sync.js)이 연결되면 여기에 보내기 함수가 들어감
+let afterSave = null;
 function save() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  catch { toast("저장하지 못했습니다. 백업 파일을 저장해 두세요."); }
+  const ok = saveLocal();
+  if (afterSave) afterSave();
+  else if (!ok) toast("저장하지 못했습니다. 백업 파일을 저장해 두세요.");
 }
 
 let state = load();
@@ -855,13 +862,25 @@ $("#sms-reset").addEventListener("click", () => {
 $("#sms-copy-all").addEventListener("click", copyUnpaidList);
 
 /* ---------- 내보내기, 불러오기 ---------- */
-function download(filename, content, type) {
+/* 파일 저장. Claude 페이지 안에서는 그 화면의 저장 기능을, 일반 브라우저에서는 바로 내려받기를 씀 */
+async function download(filename, content, type) {
+  if (window.claude?.use) {
+    const downloads = await window.claude.use("downloads");
+    if (downloads) {
+      try { await downloads.save({ filename, data: content }); return true; }
+      catch (e) {
+        if (e?.code !== "declined") toast("이 화면에서는 파일을 저장할 수 없습니다");
+        return false;
+      }
+    }
+  }
   const url = URL.createObjectURL(new Blob([content], { type }));
   const a = Object.assign(document.createElement("a"), { href: url, download: filename });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
 }
 
 function exportCsv() {
@@ -877,9 +896,8 @@ function exportCsv() {
   download(`교육비_${viewMonth}.csv`, "﻿" + [head.map(cell).join(","), ...body].join("\r\n"), "text/csv;charset=utf-8");
 }
 
-function exportJson() {
-  download(`교육비_백업_${toDate(new Date())}.json`, JSON.stringify(state, null, 2), "application/json");
-  toast("백업 파일을 저장했습니다");
+async function exportJson() {
+  if (await download(`교육비_백업_${toDate(new Date())}.json`, JSON.stringify(state, null, 2), "application/json")) toast("백업 파일을 저장했습니다");
 }
 
 async function importJson(file) {

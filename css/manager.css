@@ -24,6 +24,14 @@ body, .btn, input, select, button {
   font-weight: 700; font-size: 17px; cursor: pointer; font-variant-numeric: tabular-nums;
 }
 
+/* 온라인 저장 상태 */
+.sync-status { display: flex; align-items: baseline; gap: 8px; font-size: 14px; color: var(--text-muted); margin-bottom: -8px; }
+.sync-status::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--line); transform: translateY(-1px); }
+.sync-status[data-kind="saved"]::before { background: var(--success); }
+.sync-status[data-kind="saving"]::before, .sync-status[data-kind="connecting"]::before { background: var(--accent); }
+.sync-status[data-kind="error"] { color: var(--danger); }
+.sync-status[data-kind="error"]::before { background: var(--danger); }
+
 /* 요약 */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .stat {
